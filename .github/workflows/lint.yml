@@ -1,0 +1,25 @@
+name: lint
+
+# Only the CPU-checkable parts run here. Generation needs an SDXL checkpoint
+# and a CUDA GPU, so there is no meaningful test job to add -- the real
+# adjudication is the artgate CLI's exit code, run locally against real output.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check generate.py mcp_server.py
+      - name: Format check
+        run: ruff format --check generate.py mcp_server.py

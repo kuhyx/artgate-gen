@@ -10,7 +10,12 @@ gate-passing pixel icon using the finisher in `~/testsAndMisc`
 ## Use
 
 ```bash
-# CLI
+# One-shot: installs uv, the venv, the deps and the model, then generates + gates
+./run.sh ./icons "lantern=a brass lantern with a lit wick"
+./run.sh --setup-only          # just prepare the environment
+./run.sh -c 3 ./icons "crown=a golden crown with red jewels"   # 3 seeds, pick one
+
+# Or drive the generator directly once set up
 ./venv/bin/python generate.py <outdir> "lantern=a brass lantern with a lit wick"
 
 # gate what came out (deterministic, no tokens)
