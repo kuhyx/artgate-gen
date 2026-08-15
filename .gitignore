@@ -1,0 +1,5 @@
+# The SDXL venv is 6.8 GB of third-party wheels and model deps; it is
+# reproducible from the pinned requirements below, never committed.
+venv/
+__pycache__/
+*.log
