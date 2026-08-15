@@ -17,15 +17,16 @@ reports its exit code. It never judges art itself.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
-import generate
 from mcp.server.fastmcp import FastMCP
 from PIL import Image
+
+import generate
 
 mcp = FastMCP("artgate")
 

@@ -17,8 +17,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # Pinned, not `pip install ruff`. An unpinned install put CI on a newer
+      # ruff than the local one and failed a push that linted clean locally --
+      # green-local must mean green-CI. Bump this deliberately.
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.15.2
       - name: Lint
         run: ruff check generate.py mcp_server.py
       - name: Format check

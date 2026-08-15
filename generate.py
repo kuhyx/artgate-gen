@@ -23,14 +23,14 @@ Two findings from the bake-off are baked into the defaults:
 from __future__ import annotations
 
 import argparse
+import sys
 from collections import deque
 from pathlib import Path
-import sys
 
-from diffusers import DiffusionPipeline
 import numpy as np
-from PIL import Image
 import torch
+from diffusers import DiffusionPipeline
+from PIL import Image
 
 sys.path.insert(0, "/home/kuhy/testsAndMisc")
 from python_pkg.artgate.finish import (
