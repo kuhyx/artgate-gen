@@ -1,0 +1,34 @@
+# Pixel-art item icon: the most machine-checkable style, and the one where
+# "AI slop" is most detectable.
+#
+# CALIBRATION (measured, not guessed) over 250 genuine 32x32 CC0 icons from
+# ~/opengameart-downloads:
+#     p50=7  p75=10  p90=13  p95=14  p99=26  max=30
+# Rejection rate of real hand-made art by cap:
+#     cap 16 -> 3.6%   cap 24 -> 1.2%   cap 32 -> 0.0%
+#
+# A first attempt at 16 rejected a real DCSS rambutan icon (18 colours, clean
+# binary alpha). That is the "the threshold was wrong, not the art" failure the
+# seamless-tilesets skill documents, so the cap was re-derived from the corpus
+# rather than nudged until one file passed. 32 admits all observed hand-made
+# art while still rejecting un-quantized generator output by a wide margin
+# (a raw diffusion sample measured 34403 colours before its finishing stage).
+name = "pixel_icon"
+canvas = [32, 32]
+max_colors = 32
+alpha_binary = true
+min_margin = 1
+
+# ALPHA_NOT_BINARY is listed first because ordering is load-bearing: a
+# soft-alpha image has no fully-opaque pixels, so the colour gate would
+# otherwise count zero and pass. See pixels.py module docstring.
+# NO_OPAQUE_PIXELS is deliberately absent: it is a result code emitted by the
+# colour/palette gates when they fail closed, not a gate you can request.
+gates = [
+  "ALPHA_NOT_BINARY",
+  "TOO_MANY_COLORS",
+  "CANVAS_SIZE",
+  "SCALE_NOT_INVARIANT",
+  "SILHOUETTE_LOW_CONTRAST",
+  "MARGIN_TOO_SMALL",
+]

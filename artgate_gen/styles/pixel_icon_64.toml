@@ -1,0 +1,34 @@
+# Pixel-art item icon at 64x64: same style as `pixel_icon`, larger canvas.
+#
+# WHY THIS EXISTS. The diffusion route generates at SDXL's native 1024px, so a
+# 32px icon is a 32x downscale. Fine detail that survives the generator does not
+# survive that reduction: a coin's struck emblem, a shield's radial pattern and
+# a lantern's glass panes all mush at 32px and read clearly at 64px.
+#
+# CALIBRATION. `max_colors` is deliberately NOT raised from pixel_icon's 32.
+# Measured over the 300 genuine 48x48 icons in ~/opengameart-downloads -- the
+# largest real-art sample available locally above 32px:
+#     p50=9  p75=11  p90=13  p95=13  p99=14  max=14
+# Rejection rate of that real art: cap 32 -> 0.00%, and every larger cap also
+# 0.00%. Hand-made art does not spend more colours just because the canvas grew,
+# so raising the cap would only admit more un-quantized generator output. The
+# cap stays where the corpus puts it.
+#
+# min_margin scales with the canvas: 1px of 32 is 3.1%, so 2px of 64 keeps the
+# same proportional breathing room rather than tightening it.
+name = "pixel_icon_64"
+canvas = [64, 64]
+max_colors = 32
+alpha_binary = true
+min_margin = 2
+
+# Same gates and same ordering as pixel_icon -- see that file for why
+# ALPHA_NOT_BINARY must come first.
+gates = [
+  "ALPHA_NOT_BINARY",
+  "TOO_MANY_COLORS",
+  "CANVAS_SIZE",
+  "SCALE_NOT_INVARIANT",
+  "SILHOUETTE_LOW_CONTRAST",
+  "MARGIN_TOO_SMALL",
+]
