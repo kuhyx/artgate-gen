@@ -18,15 +18,16 @@ satisfied simultaneously.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, "/home/kuhy/testsAndMisc")
-from python_pkg.artgate.finish import finish
-from python_pkg.artgate.spec import load_spec
+from artgate_gen.gate.finish_ops import finish
+from artgate_gen.gate.spec import load_spec
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Repairable failures. Anything else -- notably SILHOUETTE_LOW_CONTRAST and
 # EMPTY_CANVAS -- is a fact about the art that re-encoding cannot change.

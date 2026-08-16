@@ -1,15 +1,9 @@
-"""Phase timing and resource sampling for the generation run.
+"""The profile collector: phase timing plus a background resource sampler.
 
-Exists because "it feels slower" is not actionable and neither is a single
-wall-clock total. Generation has four phases with completely different
-bottlenecks -- import is disk and CPU, model load is disk, the CUDA transfer is
-PCIe, and denoising is GPU compute -- so a run that got slower needs to say
-*which* phase moved before anyone can act on it.
-
-Sampling runs on a background thread rather than around each phase: peak GPU
-memory and peak CPU load happen *inside* a phase, and start/end snapshots miss
-them entirely. The thread is a daemon and the sampler is best-effort, because
-observability must never be the reason a generation fails.
+Sampling runs on its own thread rather than snapshotting around each phase,
+because peak GPU memory and peak CPU load happen *inside* a phase and
+start/end readings miss them entirely. The thread is a daemon and every probe
+is best-effort: observability must never be the reason a generation fails.
 """
 
 from __future__ import annotations
@@ -18,54 +12,14 @@ import json
 import os
 import threading
 import time
-from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING, Self
 
 import torch
 
+from artgate_gen.profiling.model import Phase, Sample, _host_rss_mb, _load1
 
-@dataclass
-class Phase:
-    """One timed span of the run.
-
-    Attributes:
-        name: Phase label, e.g. ``"load_pipeline"``.
-        seconds: Wall-clock duration.
-        detail: Free-form extras, e.g. the subject and seed for a render.
-    """
-
-    name: str
-    seconds: float
-    detail: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass
-class Sample:
-    """One resource reading taken during the run."""
-
-    at: float
-    gpu_alloc_mb: float
-    gpu_reserved_mb: float
-    host_rss_mb: float
-    load1: float
-
-
-def _host_rss_mb() -> float:
-    """Return this process's resident set size in MiB, or 0.0 if unreadable."""
-    try:
-        with open("/proc/self/statm", encoding="ascii") as handle:
-            pages = int(handle.read().split()[1])
-    except (OSError, IndexError, ValueError):
-        return 0.0
-    return pages * os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
-
-
-def _load1() -> float:
-    """Return the 1-minute load average, or 0.0 if unreadable."""
-    try:
-        return os.getloadavg()[0]
-    except OSError:
-        return 0.0
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class RunProfile:
@@ -89,7 +43,7 @@ class RunProfile:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def __enter__(self) -> RunProfile:
+    def __enter__(self) -> Self:
         """Start background sampling."""
         self._thread = threading.Thread(target=self._sample_loop, daemon=True)
         self._thread.start()
@@ -122,7 +76,12 @@ class RunProfile:
     class _Span:
         """Context manager returned by :meth:`RunProfile.phase`."""
 
-        def __init__(self, profile: RunProfile, name: str, detail: dict) -> None:
+        def __init__(
+            self,
+            profile: RunProfile,
+            name: str,
+            detail: dict[str, object],
+        ) -> None:
             self.profile = profile
             self.name = name
             self.detail = detail
@@ -175,9 +134,9 @@ class RunProfile:
         measurement, and "it got slower" is unanswerable without knowing whether
         any of these moved.
         """
+        cudnn = torch.backends.cudnn.version()
         lines = [
-            f"  torch {torch.__version__} | cuda {torch.version.cuda}"
-            f" | cudnn {torch.backends.cudnn.version()}"
+            f"  torch {torch.__version__} | cuda {torch.version.cuda} | cudnn {cudnn}"
         ]
         if torch.cuda.is_available():
             props = torch.cuda.get_device_properties(0)

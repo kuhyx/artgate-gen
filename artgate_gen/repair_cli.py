@@ -15,7 +15,7 @@ import argparse
 import json
 from pathlib import Path
 
-from repair import repair
+from artgate_gen.repair import repair
 
 
 def parse_codes(raw: str) -> list[str]:
@@ -27,8 +27,8 @@ def parse_codes(raw: str) -> list[str]:
     Returns:
         The failed gate codes, or an empty list if the verdict is unparseable.
     """
-    for line in raw.splitlines():
-        line = line.strip()
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
         if not line.startswith("{"):
             continue
         try:

@@ -63,6 +63,12 @@ ignore = [
   "S603",   # fires on every subprocess call, even a hardcoded absolute path.
 ]
 
+[tool.ruff.lint.pylint]
+# `generate_icons` genuinely takes six: out_dir, subjects, size, candidates,
+# seed and keep_raw. They are the MCP tool's published schema, so collapsing
+# them into an options object would change the wire contract for callers.
+max-args = 6
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
@@ -95,6 +101,16 @@ module = [
   "peft.*",
 ]
 ignore_missing_imports = true
+
+# torch ships `py.typed` but leaves parts of its own surface untyped (for
+# example `torch.backends.cudnn.version`), and diffusers' `from_pretrained` is
+# likewise untyped. Under `strict` those calls are errors even with the library
+# installed. Relaxed only for the two modules that touch the ML stack, so every
+# other module -- the gate, the finisher, the CLI, the server -- keeps the full
+# strict treatment including untyped-call detection.
+[[tool.mypy.overrides]]
+module = ["artgate_gen.pipeline", "artgate_gen.profiling.run"]
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -7,3 +7,11 @@ __pycache__/
 # Scratch output dir used by the README's example command. Art worth keeping
 # is curated under art/ instead; see art/README.md.
 icons/
+
+# Coverage and test artifacts.
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

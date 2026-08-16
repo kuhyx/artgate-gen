@@ -15,11 +15,6 @@ readonly SCRIPT_DIR
 readonly SCRIPT_NAME="${0##*/}"
 readonly VENV="$SCRIPT_DIR/venv"
 readonly PY="$VENV/bin/python"
-readonly ARTGATE_REPO="${ARTGATE_REPO:-$HOME/testsAndMisc}"
-
-# The finisher lives in testsAndMisc; generate.py imports it from there.
-readonly FINISH_MODULE="$ARTGATE_REPO/python_pkg/artgate/finish.py"
-
 OUT_DIR=""
 SIZE=64
 CANDIDATES=1
@@ -114,16 +109,14 @@ GATE_STATUS=0
 
 gate_one() {
     local icon="$1" spec="$2" icon_abs
-    # MUST be absolute. The gate runs with cwd=$ARTGATE_REPO, so a relative path
-    # from the caller's directory (e.g. ./icons/cat.png) resolves against the
-    # wrong root and the CLI reports "cannot read image" -- which the old code
-    # then counted as a failed gate. That bug reported 0/1 on a passing icon.
+    # Kept absolute so the verdict's echoed path is unambiguous regardless of
+    # the caller's working directory.
     icon_abs="$(realpath "$icon")"
     # Branch on the process exit code, which is already meaningful (0 pass,
     # 1 gate failure, 2 harness error), instead of grepping the JSON for a
     # substring. Uses "$PY" so the gate does not depend on whatever `python`
     # happens to be on PATH having numpy and Pillow.
-    GATE_OUTPUT="$(cd "$ARTGATE_REPO" && "$PY" -m python_pkg.artgate.cli \
+    GATE_OUTPUT="$("$PY" -m artgate_gen.gate.cli \
         "$icon_abs" --spec "$spec" --json 2>&1)"
     GATE_STATUS=$?
     return $GATE_STATUS
@@ -144,16 +137,11 @@ repair_one() {
     # Capture rather than discard: silently swallowing a repairer traceback
     # would hide a broken repair behind the gate's own verdict, which is the
     # failure mode this whole loop was rewritten to eliminate.
-    REPAIR_OUTPUT="$("$PY" "$SCRIPT_DIR/repair_cli.py" "$icon_abs" \
-        --spec "$ARTGATE_REPO/$spec" --codes "$GATE_OUTPUT" 2>&1)"
+    REPAIR_OUTPUT="$("$PY" -m artgate_gen.repair_cli "$icon_abs" \
+        --spec "$spec" --codes "$GATE_OUTPUT" 2>&1)"
 }
 
 validate_requirements() {
-    if [[ ! -f "$FINISH_MODULE" ]]; then
-        echo "Error: artgate finisher not found at $FINISH_MODULE" >&2
-        echo "       Clone github.com/kuhyx/testsAndMisc, or set ARTGATE_REPO." >&2
-        exit 1
-    fi
     if ! "$PY" -c 'import torch; assert torch.cuda.is_available()' 2>/dev/null; then
         echo "Warning: CUDA is not available; generation will be very slow." >&2
     fi
@@ -183,8 +171,8 @@ main() {
     "$PY" "$SCRIPT_DIR/generate.py" "$OUT_DIR" "${SUBJECTS[@]}" "${gen_args[@]}"
 
     log "Gating output"
-    local spec="python_pkg/artgate/styles/pixel_icon_64.toml"
-    [[ "$SIZE" == "32" ]] && spec="python_pkg/artgate/styles/pixel_icon.toml"
+    local spec="$SCRIPT_DIR/artgate_gen/styles/pixel_icon_64.toml"
+    [[ "$SIZE" == "32" ]] && spec="$SCRIPT_DIR/artgate_gen/styles/pixel_icon.toml"
     local passed=0 total=0 repaired=0
     local passed_urls=()
     for icon in "$OUT_DIR"/*.png; do
