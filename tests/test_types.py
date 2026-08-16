@@ -32,6 +32,7 @@ def test_protocol_methods_are_callable_through_the_annotation() -> None:
     pipe.set_progress_bar_config(disable=True)
     check(condition=pipe.progress_disabled, message="set_progress_bar_config()")
     check(condition=pipe.unet is not None, message="unet is exposed")
+    check(condition=pipe.tokenizer is not None, message="tokenizer is exposed")
 
     state, alphas, metadata = type(pipe).lora_state_dict("repo", weight_name="w")
     check_equal(actual=state, expected={}, message="lora_state_dict state")

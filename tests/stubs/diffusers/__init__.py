@@ -34,6 +34,26 @@ class _Unet:
     config = _UnetConfig()
 
 
+class _Tokenizer:
+    """Stands in for the CLIP tokenizer.
+
+    Counts whitespace-delimited words plus the two sentinel markers real CLIP
+    adds. That is not how BPE works, and it does not need to be: the only
+    behaviour under test is that a longer prompt reports a larger number.
+    """
+
+    def __call__(self, text: str) -> dict[str, list[int]]:
+        """Tokenize one string.
+
+        Args:
+            text: The prompt to measure.
+
+        Returns:
+            A mapping with an ``input_ids`` list, as transformers returns.
+        """
+        return {"input_ids": list(range(len(text.split()) + 2))}
+
+
 class _Result:
     """The object returned by calling the pipeline."""
 
@@ -72,6 +92,7 @@ class DiffusionPipeline:
     def __init__(self) -> None:
         """Record call history so tests can assert on it."""
         self.unet = _Unet()
+        self.tokenizer = _Tokenizer()
         self.device = "cpu"
         self.progress_disabled = False
         self.lora_loaded = False

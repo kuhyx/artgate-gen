@@ -44,6 +44,12 @@ LORA_WEIGHTS = "pixel-art-xl.safetensors"
 # force_upcast=False, so neither cast happens and both warnings go away.
 VAE = "madebyollin/sdxl-vae-fp16-fix"
 
+# A WORKAROUND for CLIP's 77-token context, not a raised limit -- it stops the
+# silent truncation but does NOT make token strength uniform. The full
+# reasoning, and what a real fix would require, is in
+# `artgate_gen.prompt_budget`.
+LONG_PROMPT_PIPELINE = "lpw_stable_diffusion_xl"
+
 # Re-exported from `targets`, which owns them alongside the backdrop variants
 # and is importable without torch. Kept as module-level names here because both
 # are part of this module's published surface and callers already import them.
@@ -146,6 +152,7 @@ def load_pipeline(profile: RunProfile | None = None) -> Pipeline:
             variant="fp16",
             use_safetensors=True,
             local_files_only=offline,
+            custom_pipeline=LONG_PROMPT_PIPELINE,
         )
     with span("load:lora"):
         _load_unet_lora(pipe, local_files_only=offline)

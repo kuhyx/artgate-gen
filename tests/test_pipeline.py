@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from artgate_gen import pipeline
+import diffusers
+
+from artgate_gen import pipeline, prompt_budget
 from artgate_gen.profiling import RunProfile
 from artgate_gen.targets import TARGETS
 from tests.assertions import check, check_equal, check_length
+
+if TYPE_CHECKING:
+    import pytest
 
 RENDER_EDGE = 64
 # Small on purpose: the real backdrop target renders at 2304x512, and no test
@@ -107,4 +112,47 @@ def test_generate_honours_a_non_square_target() -> None:
         actual=image.size,
         expected=NON_SQUARE,
         message="the non-square rendered image size",
+    )
+
+
+def test_token_count_grows_with_the_prompt() -> None:
+    """Longer prompts cost more tokens than shorter ones.
+
+    Nothing truncates any more -- `LONG_PROMPT_PIPELINE` splits a long prompt
+    into windows -- so this is the advisory signal that a prompt has grown past
+    the first attention window, not a limit check.
+    """
+    pipe = pipeline.load_pipeline()
+    short = prompt_budget.token_count(pipe, "a lantern")
+    long_prompt = prompt_budget.token_count(pipe, "a lantern " * 40)
+    check(
+        condition=long_prompt > short,
+        message=f"a longer prompt should cost more, got {long_prompt} vs {short}",
+    )
+
+
+def test_the_pipeline_loads_the_long_prompt_variant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The loader really passes `custom_pipeline` to `from_pretrained`.
+
+    Guards the specific regression that motivated it: with the stock pipeline,
+    a prompt over CLIP's context length is silently truncated, and a portrait
+    set shipped with two expression clauses that were never actually rendered.
+    Asserting on the constant alone would not catch someone dropping the
+    argument at the call site, which is the way this would actually regress.
+    """
+    seen: dict[str, object] = {}
+    original = diffusers.DiffusionPipeline.from_pretrained
+
+    def spy(*args: object, **kwargs: object) -> object:
+        seen.update(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(diffusers.DiffusionPipeline, "from_pretrained", spy)
+    pipeline.load_pipeline()
+    check_equal(
+        actual=seen.get("custom_pipeline"),
+        expected="lpw_stable_diffusion_xl",
+        message="the loader requests the chunking pipeline, not the stock one",
     )

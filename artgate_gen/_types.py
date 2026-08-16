@@ -30,6 +30,10 @@ class Pipeline(Protocol):
     """The subset of ``diffusers.DiffusionPipeline`` this package uses."""
 
     unet: Any
+    # CLIP tokenizer. Typed loosely for the same reason as `unet`: transformers
+    # leaves this callable surface untyped, so pinning it would buy nothing and
+    # force a suppression at the call site.
+    tokenizer: Any
 
     def to(self, device: str) -> Pipeline:
         """Move the pipeline onto a device.
