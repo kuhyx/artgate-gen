@@ -113,8 +113,12 @@ def repair(path: Path, spec_path: Path, codes: list[str]) -> bool:
         return False
 
     spec = load_spec(spec_path)
-    size = spec.canvas[0] if spec.canvas else Image.open(path).width
-    rgba = np.asarray(Image.open(path).convert("RGBA"), dtype=np.uint8)
+    # Opened once, under a context manager: reading `.width` from a second
+    # unclosed handle leaked a file descriptor per repair.
+    with Image.open(path) as image:
+        source = image.convert("RGBA")
+        size = spec.canvas[0] if spec.canvas else image.width
+    rgba = np.asarray(source, dtype=np.uint8)
 
     if "MARGIN_TOO_SMALL" in codes or "CANVAS_SIZE" in codes:
         rgba = inset_subject(rgba, size, spec.min_margin)

@@ -109,7 +109,13 @@ ignore_missing_imports = true
 # other module -- the gate, the finisher, the CLI, the server -- keeps the full
 # strict treatment including untyped-call detection.
 [[tool.mypy.overrides]]
-module = ["artgate_gen.pipeline", "artgate_gen.profiling.run"]
+module = [
+  "artgate_gen.pipeline",
+  "artgate_gen.profiling.run",
+  # Exercises the same untyped library surface against the stubs.
+  "tests.test_types",
+  "tests.test_pipeline",
+]
 disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
@@ -124,7 +130,16 @@ addopts = [
   "--cov-report=term-missing",
   "--cov-fail-under=100",
 ]
-filterwarnings = ["error"]
+filterwarnings = [
+  # Warnings are errors: a ResourceWarning here already caught a real
+  # file-descriptor leak in the repair path.
+  "error",
+  # Raised by pydantic_settings from inside FastMCP's own constructor, about
+  # FastMCP's own `lifespan` field. Nothing in this repository triggers it and
+  # nothing here can fix it; only this one message from that one module is
+  # exempt, so a leak of our own still fails the suite.
+  "ignore:Field 'lifespan' has an incomplete definition:UserWarning",
+]
 
 [tool.coverage.run]
 source = ["artgate_gen", "tools"]
@@ -136,4 +151,8 @@ show_missing = true
 exclude_lines = [
   "if TYPE_CHECKING:",
   'if __name__ == "__main__":',
+  # Protocol method bodies. These are declarations, not code: the `...` is
+  # never executed by anything, so requiring coverage of it would mean writing
+  # a test that calls a method with no implementation.
+  '^\s*\.\.\.$',
 ]

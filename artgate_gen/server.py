@@ -51,7 +51,9 @@ STYLES_DIR = Path(__file__).resolve().parent / "styles"
 # Alpha at or above this counts a pixel as opaque when describing an icon.
 OPAQUE_CUTOFF = 127
 
-_state = PipelineState()
+# Module-level rather than private: the tools share one pipeline, and the
+# tests need to inspect and reset residency without reaching into internals.
+state = PipelineState()
 
 
 def _pipeline() -> object:
@@ -61,12 +63,12 @@ def _pipeline() -> object:
         The diffusion pipeline.
 
     """
-    with _state.lock:
-        if _state.pipe is None:
+    with state.lock:
+        if state.pipe is None:
             pipeline = importlib.import_module("artgate_gen.pipeline")
-            _state.pipe = pipeline.load_pipeline()
-        _state.last_used = time.time()
-        return _state.pipe
+            state.pipe = pipeline.load_pipeline()
+        state.last_used = time.time()
+        return state.pipe
 
 
 def _gate(path: Path, size: int) -> dict[str, Any]:
@@ -185,13 +187,20 @@ def describe_icon(path: str) -> dict[str, Any]:
         Size, opaque coverage and distinct opaque colour count.
 
     """
-    image = Image.open(path).convert("RGBA")
-    pixels = list(image.getdata())
-    opaque = [p for p in pixels if p[3] > OPAQUE_CUTOFF]
+    # numpy rather than `Image.getdata()`, which Pillow deprecated for removal
+    # in 14, and which materialises a Python tuple per pixel besides. Opened
+    # under a context manager so the file handle is not left dangling.
+    with Image.open(path) as handle:
+        rgba = np.asarray(handle.convert("RGBA"), dtype=np.uint8)
+        size = list(handle.size)
+
+    flat = rgba.reshape(-1, 4)
+    opaque = flat[flat[:, 3] > OPAQUE_CUTOFF]
+    distinct = np.unique(opaque[:, :3], axis=0) if opaque.size else opaque
     return {
-        "size": list(image.size),
-        "opaque_fraction": round(len(opaque) / len(pixels), 4),
-        "distinct_colours": len({p[:3] for p in opaque}),
+        "size": size,
+        "opaque_fraction": round(len(opaque) / len(flat), 4),
+        "distinct_colours": int(distinct.shape[0]),
     }
 
 
@@ -203,9 +212,9 @@ def model_status() -> dict[str, Any]:
         Residency, idle time, and the configured unload window.
 
     """
-    with _state.lock:
-        loaded = _state.pipe is not None
-        idle = round(time.time() - _state.last_used) if _state.last_used else None
+    with state.lock:
+        loaded = state.pipe is not None
+        idle = round(time.time() - state.last_used) if state.last_used else None
     return {
         "loaded": loaded,
         "idle_seconds": idle,
@@ -218,5 +227,5 @@ def model_status() -> dict[str, Any]:
 
 def main() -> None:
     """Start the idle watcher and serve over stdio."""
-    start_unloader(_state)
+    start_unloader(state)
     mcp.run()

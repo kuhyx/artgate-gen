@@ -10,7 +10,7 @@ stay type-checked even though the library itself is opaque.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -18,12 +18,14 @@ if TYPE_CHECKING:
     from PIL import Image
 
 
+@runtime_checkable
 class InferenceResult(Protocol):
     """The subset of a diffusers pipeline result this package reads."""
 
     images: Sequence[Image.Image]
 
 
+@runtime_checkable
 class Pipeline(Protocol):
     """The subset of ``diffusers.DiffusionPipeline`` this package uses."""
 

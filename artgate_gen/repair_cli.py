@@ -38,13 +38,23 @@ def parse_codes(raw: str) -> list[str]:
     return []
 
 
-def main() -> int:
-    """Repair one icon in place; return 0 when a repair was written."""
+def main(argv: list[str] | None = None) -> int:
+    """Repair one icon in place.
+
+    Args:
+        argv: Command-line arguments; defaults to ``sys.argv[1:]``. Passed
+            explicitly by the tests so the entry point is exercisable without
+            a subprocess.
+
+    Returns:
+        ``0`` when a repair was written, ``1`` when none was attempted.
+
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("icon", type=Path, help="the failing icon")
     parser.add_argument("--spec", type=Path, required=True, help="artgate spec")
     parser.add_argument("--codes", required=True, help="the artgate CLI's JSON verdict")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     codes = parse_codes(args.codes)
     return 0 if codes and repair(args.icon, args.spec, codes) else 1
