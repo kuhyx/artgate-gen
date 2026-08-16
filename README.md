@@ -31,6 +31,38 @@ Also registered as the `artgate` MCP server (`mcp_server.py`), which generates
 Defaults are the bake-off-winning settings: 64px, 32 colours, seed 11, 25
 steps, guidance 7.0.
 
+## Model cache: thrifty vs. complete
+
+Two supported states. `generate.py` probes which one you are in and adapts —
+you do not pass a flag.
+
+| | disk | load path |
+|---|---|---|
+| **thrifty** (default, `fetch_model.py`) | ~7 GB | checks the Hub on every load |
+| **complete** (`fetch_full.py`) | ~77 GB | fully local, no network |
+
+The thrifty cache fetches only the fp16 weights, configs and tokenizers. That
+makes the snapshot *partial*, and huggingface_hub rejects a partial snapshot
+whenever no `allow_patterns` are given — which is exactly what diffusers does
+when it cannot reach the Hub. So offline loading requires byte completeness,
+including ~70 GB of fp32/ONNX/Flax/OpenVINO duplicates this pipeline never
+loads. That is the whole cost, and it buys ~1-2s per run plus no network
+dependency.
+
+`fetch_model.py` tells you which state you are in:
+
+```
+all 3 models already cached                                  # complete
+all 3 models already cached (partial; loads still check the Hub)
+```
+
+Note the `local_dir_use_symlinks` deprecation is **not** a network artifact and
+survives either mode — diffusers passes a deprecated kwarg to huggingface_hub,
+so it is filtered in `quiet_hub()`. The "unauthenticated requests" notice is
+deliberately *not* filtered: it is a header on the Hub's own response, so it
+appears only when a request really happened, which makes it a useful signal that
+the offline path silently fell back.
+
 ## Profiling
 
 `--profile` breaks the run into phases and reports peak GPU/RSS/load, because

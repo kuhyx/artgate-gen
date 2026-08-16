@@ -58,13 +58,35 @@ def is_cached(repo: str, allow: list[str] | None) -> bool:
     return True
 
 
+def is_complete(repo: str) -> bool:
+    """Report whether the *whole* repo is cached, not just the parts we use.
+
+    Distinct from :func:`is_cached`, which asks the narrower question. A load
+    with ``local_files_only=True`` skips the Hub round-trip but demands byte
+    completeness, so this is what decides whether generation can run offline.
+
+    Args:
+        repo: A Hugging Face repo id.
+
+    Returns:
+        ``True`` when no file in the repo is missing locally.
+    """
+    try:
+        snapshot_download(repo, local_files_only=True)
+    except Exception:
+        return False
+    return True
+
+
 def main() -> None:
     """Download whatever is missing, and say so only when there is work."""
     disable_progress_bars()
     missing = [(repo, allow) for repo, allow in REPOS if not is_cached(repo, allow)]
 
     if not missing:
-        print(f"all {len(REPOS)} models already cached")
+        offline = all(is_complete(repo) for repo, _ in REPOS)
+        note = "" if offline else " (partial; loads still check the Hub)"
+        print(f"all {len(REPOS)} models already cached{note}")
         return
 
     print(f"fetching {len(missing)} of {len(REPOS)} models (this downloads several GB)")

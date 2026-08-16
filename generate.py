@@ -23,7 +23,6 @@ Two findings from the bake-off are baked into the defaults:
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 import warnings
 from collections import deque
@@ -35,6 +34,7 @@ import numpy as np
 import torch
 from diffusers import AutoencoderKL, DiffusionPipeline
 from diffusers.utils import logging as diffusers_logging
+from huggingface_hub import snapshot_download
 from PIL import Image
 from transformers import logging as transformers_logging
 
@@ -125,32 +125,47 @@ def strip_background(rgba: np.ndarray, tol: int = 60) -> np.ndarray:
 
 
 def quiet_hub() -> None:
-    """Silence two Hub messages that report on library internals, not on us.
+    """Silence the ``local_dir_use_symlinks`` deprecation.
 
-    Neither is emitted by anything in this repo, and neither is actionable:
+    Not our call site: diffusers passes that long-deprecated kwarg to
+    huggingface_hub itself, defaulted to ``"auto"`` rather than ``None``, so the
+    deprecation check fires on every load. Nothing in this repo supplies it and
+    nothing here can stop it. Loading offline does *not* suppress it either --
+    it is a local deprecation, unrelated to the network. Remove this filter once
+    diffusers stops passing the kwarg.
 
-    * ``local_dir_use_symlinks``: diffusers passes this long-deprecated kwarg to
-      huggingface_hub itself. ``configuration_utils.py`` defaults it to
-      ``"auto"`` -- not ``None`` -- so the deprecation check fires on every load.
-      There is no call site here to fix; it goes away when diffusers stops
-      passing it.
-    * ``unauthenticated requests``: not a local message at all. It is a
-      ``Warning:`` HTTP header on the Hub's own response, echoed by
-      ``_http.py:_warn_on_warning_headers``. Setting ``HF_TOKEN`` removes it and
-      raises the rate limit; it costs ~1-2s per run and is otherwise harmless.
-
-    Why not offline mode, which would remove the requests rather than hide the
-    warning: ``fetch_model.py`` fetches with ``allow_patterns`` to skip the fp32,
-    ONNX and Flax duplicates, so the local snapshot is deliberately partial.
-    Both ``HF_HUB_OFFLINE=1`` and ``local_files_only=True`` reject a partial
-    snapshot outright (``IncompleteSnapshotError``), and completing it means
-    downloading **69.8 GB** of weights this pipeline never loads. Measured, not
-    assumed. The metadata round-trip is the cheaper trade.
+    The companion "unauthenticated requests" message is deliberately NOT
+    filtered here: it is a ``Warning:`` header on the Hub's own HTTP response,
+    so it appears if and only if a request was actually made. That makes it a
+    useful signal that the local-only path silently fell back to the network,
+    and hiding it would hide the regression.
     """
-    for pattern in (".*local_dir_use_symlinks.*", ".*unauthenticated requests.*"):
-        warnings.filterwarnings("ignore", message=pattern)
-    # The Hub's echoed header goes through logging, not warnings.
-    logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
+    warnings.filterwarnings("ignore", message=".*local_dir_use_symlinks.*")
+
+
+def local_only() -> bool:
+    """Report whether every repo can be loaded without touching the network.
+
+    ``from_pretrained`` revalidates against the Hub on each load unless told not
+    to, which costs a round-trip and is the source of the "unauthenticated
+    requests" notice. Passing ``local_files_only=True`` skips it -- but
+    huggingface_hub then rejects a *partial* snapshot outright, and the SDXL repo
+    is only partial if it was fetched with ``allow_patterns``. So the answer is
+    not a constant: it depends on how the cache was populated.
+
+    Probing beats assuming in both directions. Hardcoding local-only breaks the
+    thrifty ~7 GB cache; hardcoding online gives up the saving for anyone who ran
+    ``fetch_full.py``. The probe is a cheap filesystem check, done once.
+
+    Returns:
+        ``True`` when the full snapshot is present, so loads can skip the Hub.
+    """
+    try:
+        for repo in (MODEL, VAE, LORA):
+            snapshot_download(repo, local_files_only=True)
+    except Exception:
+        return False
+    return True
 
 
 def load_pipeline(profile: RunProfile | None = None) -> DiffusionPipeline:
@@ -171,9 +186,16 @@ def load_pipeline(profile: RunProfile | None = None) -> DiffusionPipeline:
     transformers_logging.disable_progress_bar()
     quiet_hub()
 
+    # Skips a Hub round-trip per repo when the full snapshot is cached; falls
+    # back to the network automatically when it is not, so a thrifty cache keeps
+    # working. Probed once here rather than per call.
+    offline = local_only()
+
     span = profile.phase if profile is not None else _null_span
     with span("load:vae"):
-        vae = AutoencoderKL.from_pretrained(VAE, torch_dtype=torch.float16)
+        vae = AutoencoderKL.from_pretrained(
+            VAE, torch_dtype=torch.float16, local_files_only=offline
+        )
     with span("load:pipeline"):
         pipe = DiffusionPipeline.from_pretrained(
             MODEL,
@@ -181,9 +203,10 @@ def load_pipeline(profile: RunProfile | None = None) -> DiffusionPipeline:
             torch_dtype=torch.float16,
             variant="fp16",
             use_safetensors=True,
+            local_files_only=offline,
         )
     with span("load:lora"):
-        _load_unet_lora(pipe)
+        _load_unet_lora(pipe, local_files_only=offline)
     with span("load:to_cuda"):
         pipe = pipe.to("cuda")
     pipe.set_progress_bar_config(disable=True)
@@ -196,7 +219,7 @@ def _null_span(_name: str, **_detail: object) -> Iterator[None]:
     yield
 
 
-def _load_unet_lora(pipe: DiffusionPipeline) -> None:
+def _load_unet_lora(pipe: DiffusionPipeline, *, local_files_only: bool) -> None:
     """Apply the LoRA to the UNet only.
 
     Not a micro-optimisation and not a warning suppression: every one of this
@@ -205,9 +228,16 @@ def _load_unet_lora(pipe: DiffusionPipeline) -> None:
     calls ``load_lora_into_text_encoder`` unconditionally for both SDXL text
     encoders, and each one logs that it found no matching keys. Doing the UNet
     load explicitly injects the identical 6498 LoRA modules and stays silent.
+
+    Args:
+        pipe: The pipeline whose UNet receives the LoRA.
+        local_files_only: Skip the Hub revalidation for the LoRA repo too.
     """
     state_dict, alphas, metadata = type(pipe).lora_state_dict(
-        LORA, unet_config=pipe.unet.config, return_lora_metadata=True
+        LORA,
+        unet_config=pipe.unet.config,
+        return_lora_metadata=True,
+        local_files_only=local_files_only,
     )
     pipe.load_lora_into_unet(
         state_dict,
