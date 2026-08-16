@@ -29,8 +29,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from diffusers import DiffusionPipeline
+from diffusers import AutoencoderKL, DiffusionPipeline
+from diffusers.utils import logging as diffusers_logging
 from PIL import Image
+from transformers import logging as transformers_logging
 
 sys.path.insert(0, "/home/kuhy/testsAndMisc")
 from python_pkg.artgate.finish import (
@@ -41,6 +43,12 @@ from python_pkg.artgate.finish import (
 
 MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 LORA = "nerijs/pixel-art-xl"
+# SDXL's stock VAE overflows in fp16, so it ships `force_upcast=True`: diffusers
+# casts it to fp32 before every decode and back to fp16 afterwards, via a method
+# it has itself deprecated. That is two `.to()` calls per image, each emitting a
+# warning. This drop-in decoder is numerically safe in fp16 and sets
+# force_upcast=False, so neither cast happens and both warnings go away.
+VAE = "madebyollin/sdxl-vae-fp16-fix"
 
 # Verbatim from the bake-off run that produced the accepted icons.
 STYLE = "pixel art, game item icon, centered, plain black background, crisp"
@@ -108,17 +116,47 @@ def strip_background(rgba: np.ndarray, tol: int = 60) -> np.ndarray:
 
 
 def load_pipeline() -> DiffusionPipeline:
-    """Load SDXL with the pixel-art LoRA onto the GPU."""
+    """Load SDXL with the fp16-safe VAE and the pixel-art LoRA onto the GPU."""
+    # Must be disabled before from_pretrained: pipe.set_progress_bar_config()
+    # below only silences the *inference* bar, so the component-loading bars are
+    # already drawn by then. With no TTY they redraw into one unreadable line.
+    # Both libraries need telling -- the per-component "Loading weights" bars
+    # come from transformers, not diffusers.
+    diffusers_logging.disable_progress_bar()
+    transformers_logging.disable_progress_bar()
     pipe = DiffusionPipeline.from_pretrained(
         MODEL,
+        vae=AutoencoderKL.from_pretrained(VAE, torch_dtype=torch.float16),
         torch_dtype=torch.float16,
         variant="fp16",
         use_safetensors=True,
     )
-    pipe.load_lora_weights(LORA)
+    _load_unet_lora(pipe)
     pipe = pipe.to("cuda")
     pipe.set_progress_bar_config(disable=True)
     return pipe
+
+
+def _load_unet_lora(pipe: DiffusionPipeline) -> None:
+    """Apply the LoRA to the UNet only.
+
+    Not a micro-optimisation and not a warning suppression: every one of this
+    LoRA's 2166 tensors is a ``lora_unet_*`` key, so there is nothing for a text
+    encoder to load. The convenience wrapper ``load_lora_weights`` nevertheless
+    calls ``load_lora_into_text_encoder`` unconditionally for both SDXL text
+    encoders, and each one logs that it found no matching keys. Doing the UNet
+    load explicitly injects the identical 6498 LoRA modules and stays silent.
+    """
+    state_dict, alphas, metadata = type(pipe).lora_state_dict(
+        LORA, unet_config=pipe.unet.config, return_lora_metadata=True
+    )
+    pipe.load_lora_into_unet(
+        state_dict,
+        network_alphas=alphas,
+        unet=pipe.unet,
+        metadata=metadata,
+        _pipeline=pipe,
+    )
 
 
 def generate(pipe: DiffusionPipeline, prompt: str, seed: int) -> Image.Image:

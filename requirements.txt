@@ -1,4 +1,12 @@
+# torch's +cu128 local version resolves from PyPI, but torchvision's does not,
+# so the PyTorch index is added as an EXTRA index -- `--index-url` would replace
+# PyPI outright and strand every pin below that PyTorch does not mirror.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
 torch==2.11.0+cu128
+# transformers falls back to a PIL image processor and warns on every run when
+# torchvision is absent; the version is the one paired with torch 2.11.0+cu128.
+torchvision==0.26.0+cu128
 diffusers==0.39.0
 transformers==5.15.0
 accelerate==1.14.0

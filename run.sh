@@ -87,9 +87,51 @@ install_deps() {
 }
 
 fetch_model() {
-    # snapshot_download is a no-op once the HF cache holds the weights.
-    log "Ensuring SDXL base + pixel-art LoRA are cached"
+    # fetch_model.py probes the cache first and prints its own one-line status,
+    # so there is deliberately no log line here -- an unconditional "Ensuring
+    # ..." banner is exactly the noise this step was asked to stop emitting.
     "$PY" "$SCRIPT_DIR/fetch_model.py"
+}
+
+# Set by gate_one: the CLI's combined output and its exit status, for the
+# caller to branch on and report.
+GATE_OUTPUT=""
+GATE_STATUS=0
+
+gate_one() {
+    local icon="$1" spec="$2" icon_abs
+    # MUST be absolute. The gate runs with cwd=$ARTGATE_REPO, so a relative path
+    # from the caller's directory (e.g. ./icons/cat.png) resolves against the
+    # wrong root and the CLI reports "cannot read image" -- which the old code
+    # then counted as a failed gate. That bug reported 0/1 on a passing icon.
+    icon_abs="$(realpath "$icon")"
+    # Branch on the process exit code, which is already meaningful (0 pass,
+    # 1 gate failure, 2 harness error), instead of grepping the JSON for a
+    # substring. Uses "$PY" so the gate does not depend on whatever `python`
+    # happens to be on PATH having numpy and Pillow.
+    GATE_OUTPUT="$(cd "$ARTGATE_REPO" && "$PY" -m python_pkg.artgate.cli \
+        "$icon_abs" --spec "$spec" --json 2>&1)"
+    GATE_STATUS=$?
+    return $GATE_STATUS
+}
+
+# Set by repair_one to the repairer's output, so a crash is reportable.
+REPAIR_OUTPUT=""
+
+repair_one() {
+    local icon="$1" spec="$2" icon_abs
+    # Only exit status 1 is an art verdict. 2 is a harness error (unreadable
+    # file, bad spec) which re-encoding cannot fix, so do not try -- and read
+    # the status, not the JSON text, for the same reason gate_one does.
+    if [[ $GATE_STATUS -ne 1 ]]; then
+        return 1
+    fi
+    icon_abs="$(realpath "$icon")"
+    # Capture rather than discard: silently swallowing a repairer traceback
+    # would hide a broken repair behind the gate's own verdict, which is the
+    # failure mode this whole loop was rewritten to eliminate.
+    REPAIR_OUTPUT="$("$PY" "$SCRIPT_DIR/repair_cli.py" "$icon_abs" \
+        --spec "$ARTGATE_REPO/$spec" --codes "$GATE_OUTPUT" 2>&1)"
 }
 
 validate_requirements() {
@@ -128,18 +170,35 @@ main() {
     log "Gating output"
     local spec="python_pkg/artgate/styles/pixel_icon_64.toml"
     [[ "$SIZE" == "32" ]] && spec="python_pkg/artgate/styles/pixel_icon.toml"
-    local passed=0 total=0
+    local passed=0 total=0 repaired=0
     for icon in "$OUT_DIR"/*.png; do
         [[ -f "$icon" ]] || continue
         total=$((total + 1))
-        if (cd "$ARTGATE_REPO" && python -m python_pkg.artgate.cli "$icon" \
-            --spec "$spec" --json 2>/dev/null | grep -q '"exit": 0'); then
+        REPAIR_OUTPUT=""  # per-icon, or a stale message follows the next failure
+        if gate_one "$icon" "$spec"; then
             passed=$((passed + 1))
+        elif repair_one "$icon" "$spec" && gate_one "$icon" "$spec"; then
+            passed=$((passed + 1))
+            repaired=$((repaired + 1))
+            echo "    repaired: $icon"
         else
-            echo "    gate FAILED: $icon"
+            printf '    gate FAILED: %s\n' "$icon"
+            # Print the verdict rather than discarding it. The previous version
+            # sent stderr to /dev/null, which hid "cannot read image" and made a
+            # path bug look like an art failure for every icon.
+            printf '      %s\n' "$GATE_OUTPUT"
+            # A repairer that crashed is a bug in this repo, not a verdict on
+            # the art -- say so instead of letting it look like an art failure.
+            if [[ -n "$REPAIR_OUTPUT" ]]; then
+                printf '      repair did not help: %s\n' "$REPAIR_OUTPUT"
+            fi
         fi
     done
-    log "$passed/$total passed the ${SIZE}px gate"
+    if [[ $repaired -gt 0 ]]; then
+        log "$passed/$total passed the ${SIZE}px gate ($repaired after auto-repair)"
+    else
+        log "$passed/$total passed the ${SIZE}px gate"
+    fi
     log "Gates check canvas/palette/alpha/margin/contrast, NOT whether the art"
     log "looks good. Look at the icons before calling them done."
 }

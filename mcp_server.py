@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -74,7 +75,18 @@ def _gate(path: Path, size: int) -> dict[str, Any]:
     if spec is None:
         return {"gated": False, "reason": f"no spec for size {size}"}
     result = subprocess.run(
-        ["python", "-m", "python_pkg.artgate.cli", str(path), "--spec", spec, "--json"],
+        # The path must be absolute and the interpreter must be this venv's:
+        # the CLI runs with cwd=ARTGATE_REPO, so a relative path resolves
+        # against the wrong root, and a bare "python" is whatever is on PATH.
+        [
+            sys.executable,
+            "-m",
+            "python_pkg.artgate.cli",
+            str(path.resolve()),
+            "--spec",
+            spec,
+            "--json",
+        ],
         cwd=ARTGATE_REPO,
         capture_output=True,
         text=True,
