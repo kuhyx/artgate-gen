@@ -46,6 +46,13 @@ Issues = "https://github.com/kuhyx/artgate-gen/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["artgate_gen"]
 
+# The sdist would otherwise carry the 74 sample PNGs under `art/`, which is
+# 9 MB of example output rather than source. They stay in the repository,
+# where they document what the generator actually produces, but nobody
+# installing the package needs them.
+[tool.hatch.build.targets.sdist]
+exclude = ["art", "icons", "venv", ".github", "*.log"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 88
