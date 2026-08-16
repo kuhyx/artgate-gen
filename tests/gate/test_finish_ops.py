@@ -15,6 +15,7 @@ from artgate_gen.gate.finish_ops import (
     ALPHA_CUTOFF,
     binarize_alpha,
     downscale,
+    downscale_to,
     finish,
     quantize,
 )
@@ -126,3 +127,28 @@ class TestStages:
         arr[0, :, 3] = 255
         out = quantize(arr, 4)
         check(condition=not out[1:, :, :].any(), message="not out[1:, :, :].any()")
+
+    def test_downscale_to_takes_an_arbitrary_shape(self) -> None:
+        """A non-square target comes back at exactly that width and height."""
+        arr = np.zeros((64, 256, 4), dtype=np.uint8)
+        arr[:, :, 3] = 255
+        out = downscale_to(arr, (32, 8))
+        check_equal(
+            actual=(out.shape[1], out.shape[0]),
+            expected=(32, 8),
+            message="the non-square downscale shape",
+        )
+
+    def test_downscale_delegates_to_downscale_to(self) -> None:
+        """The square form is exactly the non-square form with equal sides.
+
+        Asserted rather than assumed because ``downscale`` is the vendored
+        signature: it must keep producing what the copy in ``testsAndMisc``
+        produces, and delegation is the only reason that stays true for free.
+        """
+        rng = np.random.default_rng(5)
+        arr = rng.integers(0, 255, (32, 32, 4), dtype=np.uint8)
+        check(
+            condition=bool((downscale(arr, 8) == downscale_to(arr, (8, 8))).all()),
+            message="downscale matches downscale_to at equal sides",
+        )

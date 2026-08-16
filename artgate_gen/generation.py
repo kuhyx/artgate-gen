@@ -15,6 +15,7 @@ from pydantic import Field
 
 from artgate_gen.finish import finish
 from artgate_gen.gating import gate
+from artgate_gen.targets import TARGETS
 from artgate_gen.unload import PipelineState
 
 # Module-level rather than private: the tools share one pipeline, and the
@@ -105,11 +106,23 @@ def generate_icons(
     if keep_raw:
         raw_dir.mkdir(parents=True, exist_ok=True)
 
+    # Derived from `size` rather than taken as a parameter: `generate_icons`
+    # is already at the repo's six-argument limit, and those six are the MCP
+    # tool's published schema. An unsupported size returns an error rather than
+    # raising KeyError at the MCP boundary.
+    target = TARGETS.get((size, size))
+    if target is None:
+        sizes = sorted(w for w, h in TARGETS if w == h)
+        return {
+            "icons": [],
+            "summary": f"no target for size {size}; supported sizes are {sizes}",
+        }
+
     pipe = pipeline()
     results = []
     for name, prompt in subjects.items():
         for candidate in range(candidates):
-            image = module.generate(pipe, prompt, seed + candidate)
+            image = module.generate(pipe, prompt, seed + candidate, target)
             suffix = "" if candidates == 1 else f"_{candidate}"
             if keep_raw:
                 image.save(raw_dir / f"{name}{suffix}.png")

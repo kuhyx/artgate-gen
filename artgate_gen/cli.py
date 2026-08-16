@@ -13,6 +13,7 @@ from pathlib import Path
 from artgate_gen.console import emit
 from artgate_gen.finish import finish
 from artgate_gen.profiling import RunProfile
+from artgate_gen.targets import TARGETS
 
 # Shown by `--help`. Kept as its own constant rather than reusing the module
 # docstring: the docstring explains the module to a reader of the source, while
@@ -115,6 +116,14 @@ def main() -> None:
     if args.keep_raw:
         raw_dir.mkdir(parents=True, exist_ok=True)
 
+    # The CLI is square-only; widening `--size` to a non-square target is a
+    # separate change to this module's published argument surface. An unknown
+    # size fails here with a usage error rather than a KeyError, and rather
+    # than rendering art no spec can gate.
+    target = TARGETS.get((args.size, args.size))
+    if target is None:
+        parser.error(f"no target for size {args.size}")
+
     with RunProfile() as profile:
         pipe = pipeline.load_pipeline(profile)
         for name, prompt in pairs:
@@ -125,7 +134,7 @@ def main() -> None:
                 # pure-Python flood fill over a megapixel, so lumping them
                 # together hides which one actually costs.
                 with profile.phase(f"render:{name}{suffix}", seed=seed):
-                    image = pipeline.generate(pipe, prompt, seed)
+                    image = pipeline.generate(pipe, prompt, seed, target)
                 if args.keep_raw:
                     image.save(raw_dir / f"{name}{suffix}.png")
                 with profile.phase(f"finish:{name}{suffix}"):

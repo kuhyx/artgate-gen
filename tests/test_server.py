@@ -152,6 +152,25 @@ def test_generate_icons_writes_gates_and_summarises(tmp_path: Path) -> None:
     generation.state.pipe = None
 
 
+def test_generate_icons_rejects_an_unsupported_size(tmp_path: Path) -> None:
+    """An unsupported size returns an explanation, not a KeyError.
+
+    This crosses the MCP boundary, where an exception is an opaque tool
+    failure; naming the supported sizes lets the caller fix the call.
+    """
+    unsupported = 48
+    result = server.generate_icons(
+        str(tmp_path),
+        {"axe": "a stone axe"},
+        size=unsupported,
+    )
+    check_length(sized=result["icons"], expected=0, message="nothing was produced")
+    check(
+        condition="no target for size" in result["summary"],
+        message="the summary explains the refusal",
+    )
+
+
 def test_generate_icons_keeps_raw_renders(tmp_path: Path) -> None:
     """The full-resolution render is kept when asked."""
     server.generate_icons(

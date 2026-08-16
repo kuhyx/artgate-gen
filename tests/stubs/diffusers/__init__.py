@@ -144,17 +144,26 @@ class DiffusionPipeline:
         self.progress_disabled = disable
 
     def __call__(self, **kwargs: object) -> _Result:
-        """Render one inert image.
+        """Render one inert image at the requested size.
+
+        ``width``/``height`` are honoured rather than discarded, so a
+        non-square target is distinguishable from a square one in tests. Both
+        default to ``RENDER_SIZE``, leaving callers that omit them unaffected.
 
         Args:
-            **kwargs: Ignored.
+            **kwargs: Rendering arguments; only ``width``/``height`` are read.
 
         Returns:
             A result holding one small RGB image.
 
         """
-        del kwargs
-        image = Image.new("RGB", (RENDER_SIZE, RENDER_SIZE), (40, 60, 90))
+        width = kwargs.get("width", RENDER_SIZE)
+        height = kwargs.get("height", RENDER_SIZE)
+        size = (
+            width if isinstance(width, int) else RENDER_SIZE,
+            height if isinstance(height, int) else RENDER_SIZE,
+        )
+        image = Image.new("RGB", size, (40, 60, 90))
         return _Result([image])
 
 

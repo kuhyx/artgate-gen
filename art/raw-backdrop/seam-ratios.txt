@@ -1,0 +1,13 @@
+threshold 4.0
+
+PASS  h=  0.27  v=  6.61  desert-dusk_s0.png
+PASS  h=  0.40  v=  5.71  desert-dusk_s1.png
+PASS  h=  1.03  v=  5.92  desert-dusk_s2.png
+PASS  h=  0.46  v=  1.05  desert-night_s0.png
+PASS  h=  1.06  v=  2.04  desert-night_s1.png
+PASS  h=  2.27  v=  4.77  desert-night_s2.png
+PASS  h=  0.33  v=  2.69  desert-storm_s0.png
+PASS  h=  0.94  v=  3.00  desert-storm_s1.png
+PASS  h=  1.27  v=  2.91  desert-storm_s2.png
+
+worst horizontal 2.27

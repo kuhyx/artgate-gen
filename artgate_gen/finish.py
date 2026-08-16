@@ -1,10 +1,20 @@
-"""Reduce a continuous-tone render to a gate-passing pixel icon.
+"""Reduce a continuous-tone render to gate-passing pixel art.
 
-Order is load-bearing and mirrors the gate's own order: the background goes
-first, then the downscale, then alpha is binarised, and only then is the
-palette quantised. Quantising earlier would blend the arbitrary RGB carried by
-transparent pixels into the palette and inflate the colour count -- the exact
-bug that once produced 18 colours against a cap of 16.
+Two finishers, because two kinds of art need opposite treatment.
+
+``finish_icon`` is the original: the background goes first, then the downscale,
+then alpha is binarised, and only then is the palette quantised. Quantising
+earlier would blend the arbitrary RGB carried by transparent pixels into the
+palette and inflate the colour count -- the exact bug that once produced 18
+colours against a cap of 16.
+
+``finish_backdrop`` deliberately skips two of those steps. A parallax strip is
+full-bleed: every pixel is subject, so there is no background to strip and no
+transparency to binarise. Running ``strip_background`` on one destroys it --
+measured, opaque fraction 1.000 -> 0.531 on a synthetic gradient sky, because
+the flood starts from the border ring and the sky is within tolerance of the
+border median. The strip instead gets a wrap-blend, which is what lets three
+instances tile horizontally without a seam.
 """
 
 from __future__ import annotations
@@ -15,9 +25,9 @@ import numpy as np
 from PIL import Image
 
 from artgate_gen.background import strip_background
-from artgate_gen.gate.finish_ops import binarize_alpha, downscale, quantize
+from artgate_gen.gate.finish_ops import binarize_alpha, downscale_to, quantize
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from numpy.typing import NDArray
 
 # Both icon specs cap the palette at 32, and the number is calibrated against
@@ -28,9 +38,111 @@ if TYPE_CHECKING:
 # TOO_MANY_COLORS on all 18 subjects.
 MAX_COLOURS = 32
 
+# Width of the horizontal overlap a backdrop is rendered with and blended over.
+# At the 2304x512 render size this is exactly the 256px excess over the 2048x512
+# finished width, so the blend consumes the surplus and nothing is cropped away
+# un-blended.
+WRAP_OVERLAP = 256
+
+
+def wrap_blend(
+    rgba: NDArray[np.uint8], overlap: int = WRAP_OVERLAP
+) -> NDArray[np.uint8]:
+    """Fold an oversized render's right edge back over its left, then crop.
+
+    Renders arrive ``overlap`` pixels wider than they finish. The surplus strip
+    on the right is cross-faded onto the left edge with a linear ramp, so the
+    first and last columns of the result are near-identical and the image tiles
+    horizontally. Raw diffusion output does not: measured seam ratios of
+    realistic non-tiling renders are 5.94 and 255.00 against a threshold of 4.0,
+    and the same renders blended are 1.03 and 0.58.
+
+    Args:
+        rgba: An ``(h, w, 4)`` uint8 array, wider than its finished width by
+            ``overlap``.
+        overlap: Width of the blended region in pixels.
+
+    Returns:
+        An ``(h, w - overlap, 4)`` uint8 array that wraps continuously.
+    """
+    keep = rgba.shape[1] - overlap
+    out = rgba[:, :keep].astype(np.float64).copy()
+    tail = rgba[:, keep:].astype(np.float64)
+    # Ramp from 0 at the left edge to 1 just past the overlap: the tail fully
+    # replaces column 0 and fades out, so there is no step at either end of the
+    # blended region.
+    ramp = np.linspace(0.0, 1.0, overlap, endpoint=False).reshape(1, overlap, 1)
+    out[:, :overlap] = tail * (1.0 - ramp) + out[:, :overlap] * ramp
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def finish_icon(
+    raw: Image.Image, canvas: tuple[int, int], colours: int = MAX_COLOURS
+) -> Image.Image:
+    """Strip the background and reduce a render to an icon.
+
+    Args:
+        raw: The full-resolution render.
+        canvas: Target ``(width, height)`` in pixels.
+        colours: Palette cap.
+
+    Returns:
+        The finished icon, ready for the gate.
+    """
+    arr: NDArray[np.uint8] = np.asarray(raw.convert("RGBA"), dtype=np.uint8)
+    stripped = strip_background(arr)
+    reduced = quantize(binarize_alpha(downscale_to(stripped, canvas)), colours)
+    return Image.fromarray(reduced, "RGBA")
+
+
+def finish_backdrop(
+    raw: Image.Image, canvas: tuple[int, int], colours: int = MAX_COLOURS
+) -> Image.Image:
+    """Wrap-blend a strip and reduce it, keeping every pixel opaque.
+
+    Neither ``strip_background`` nor ``binarize_alpha`` runs here; see the module
+    docstring for what the former does to a full-bleed image. Alpha is forced to
+    255 rather than merely left alone, so the result is opaque by construction
+    and the bypass is verifiable instead of trusted.
+
+    The overlap is derived from the render's own geometry rather than assumed to
+    be ``WRAP_OVERLAP``. The *height* fixes the reduction factor unambiguously
+    (nothing is cropped vertically), so the blended width must be that factor
+    times the canvas width, and the surplus is the overlap. Deriving it from the
+    width instead would fail on the production case: 2304 is itself an exact
+    multiple of 256, so a width-based rule computes an overlap of zero.
+
+    Args:
+        raw: The full-resolution render, oversized horizontally.
+        canvas: Target ``(width, height)`` in pixels.
+        colours: Palette cap.
+
+    Returns:
+        The finished strip, tiling horizontally.
+
+    Raises:
+        ValueError: If the render leaves no horizontal overlap to blend.
+    """
+    arr: NDArray[np.uint8] = np.asarray(raw.convert("RGBA"), dtype=np.uint8)
+    factor = arr.shape[0] // canvas[1]
+    overlap = arr.shape[1] - factor * canvas[0]
+    if overlap <= 0:
+        msg = (
+            f"a {arr.shape[1]}x{arr.shape[0]} render leaves no wrap overlap at "
+            f"canvas {canvas[0]}x{canvas[1]}; it must be wider than "
+            f"{factor * canvas[0]}px"
+        )
+        raise ValueError(msg)
+    reduced = quantize(downscale_to(wrap_blend(arr, overlap), canvas), colours)
+    opaque = reduced.copy()
+    opaque[:, :, 3] = 255
+    return Image.fromarray(opaque, "RGBA")
+
 
 def finish(raw: Image.Image, size: int, colours: int | None = None) -> Image.Image:
-    """Strip the background and reduce a render to a square icon.
+    """Reduce a render to a square icon.
+
+    Retained as the square-only entry point used by the CLI and the MCP tool.
 
     Args:
         raw: The full-resolution render.
@@ -40,10 +152,4 @@ def finish(raw: Image.Image, size: int, colours: int | None = None) -> Image.Ima
     Returns:
         The finished icon, ready for the gate.
     """
-    arr: NDArray[np.uint8] = np.asarray(raw.convert("RGBA"), dtype=np.uint8)
-    stripped = strip_background(arr)
-    reduced = quantize(
-        binarize_alpha(downscale(stripped, size)),
-        colours or MAX_COLOURS,
-    )
-    return Image.fromarray(reduced, "RGBA")
+    return finish_icon(raw, (size, size), colours or MAX_COLOURS)

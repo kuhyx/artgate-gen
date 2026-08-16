@@ -1,0 +1,59 @@
+# Parallax backdrop strip at 256x64: the first non-square, non-icon target.
+#
+# WHY THIS EXISTS. Everything else artgate produces is a single centred object
+# on a void. A parallax strip is the opposite: full-bleed, no subject, and
+# tiled horizontally -- three instances are live on screen at once, so a
+# discontinuous wrap shows as a seam on every frame rather than once.
+#
+# RENDER PATH. Rendered at 2304x512, wrap-blended over the 256px overlap, and
+# cropped to 2048x512 before an integer 8x reduction to 256x64. 2048x512 is a
+# real SDXL training bucket (exactly 1024^2 area), and 2048/256 = 512/64 = 8
+# keeps the reduction uniform on both axes. The finisher is `finish_backdrop`,
+# which skips `strip_background` -- measured, that flood destroyed 47% of a
+# synthetic full-bleed sky (opaque 1.000 -> 0.531) because it starts from the
+# border ring and a sky is within tolerance of the border median.
+#
+# CALIBRATION. `max_colors` stays at 32, the same cap as both icon specs. The
+# standing rule is "do not DERIVE the cap from canvas size", not "every style
+# shares 32" -- but a backdrop is a sky gradient, which is exactly the content
+# most likely to band, and raising the cap is a decision to make against a real
+# render rather than a guess made before the first one. If it bands, this is
+# where the evidence gets recorded.
+#
+# There is no `min_margin` and no `alpha_binary`. Both describe a subject
+# surrounded by transparency; a full-bleed strip has neither.
+name = "backdrop_strip"
+canvas = [256, 64]
+max_colors = 32
+
+# THE COMMENTED GATES ARE NOT DECORATION -- they are the four this spec needs
+# and does not yet have. `load_spec` fails closed on any code outside
+# DECLARABLE (gate/spec.py:135-139), and none of these four is implemented or
+# declarable yet, so uncommenting one today makes this file unloadable. That is
+# the intended behaviour: declaring a gate must never be enough to make it run,
+# because a spec naming an unimplemented gate would parse cleanly, run nothing,
+# and report a pass indistinguishable from art that genuinely passed.
+#
+# The two active gates are honest but trivial -- the finisher guarantees both by
+# construction. Shipping only these is a deliberate, temporary fail-open, and it
+# is why this spec must not be treated as evidence that a strip is good.
+#
+# Session 2 implements the four below and uncomments them here, in this order:
+#   FULLY_OPAQUE_REQUIRED  first of the new block -- the luma gates are
+#                          meaningless on an image with no opaque pixels, the
+#                          same reason ALPHA_NOT_BINARY precedes TOO_MANY_COLORS.
+#                          Near-trivial, but it makes the strip_background
+#                          bypass verifiable rather than trusted.
+#   LETTERBOX_BARS         genuinely failable. Requires BOTH a near-black edge
+#                          band and a bright interior, so it does not fire on
+#                          legitimate night-sky art.
+#   NO_VERTICAL_STRUCTURE  genuinely failable -- catches a flat wash.
+#   SEAM_ENERGY            genuinely failable if wrap-blend regresses.
+gates = [
+  "CANVAS_SIZE",
+  "TOO_MANY_COLORS",
+  # "FULLY_OPAQUE_REQUIRED",
+  # "LETTERBOX_BARS",
+  # "NO_VERTICAL_STRUCTURE",
+  # "SEAM_ENERGY",
+]

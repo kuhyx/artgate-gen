@@ -45,6 +45,24 @@ def binarize_alpha(rgba: NDArray[np.uint8]) -> NDArray[np.uint8]:
     return out
 
 
+def downscale_to(rgba: NDArray[np.uint8], size: tuple[int, int]) -> NDArray[np.uint8]:
+    """Box-downscale to an arbitrary ``(w, h)``, preserving straight alpha.
+
+    The non-square form exists for backdrop strips, which are 4:1. ``downscale``
+    delegates here rather than the reverse so the vendored square signature
+    stays byte-compatible with the copy in ``testsAndMisc``.
+
+    Args:
+        rgba: An ``(h, w, 4)`` uint8 array.
+        size: Target ``(width, height)`` in pixels.
+
+    Returns:
+        A ``(height, width, 4)`` uint8 array.
+    """
+    img = Image.fromarray(rgba, "RGBA").resize(size, Image.Resampling.BOX)
+    return np.asarray(img, dtype=np.uint8)
+
+
 def downscale(rgba: NDArray[np.uint8], target: int) -> NDArray[np.uint8]:
     """Box-downscale to a square target, preserving straight alpha.
 
@@ -55,8 +73,7 @@ def downscale(rgba: NDArray[np.uint8], target: int) -> NDArray[np.uint8]:
     Returns:
         A ``(target, target, 4)`` uint8 array.
     """
-    img = Image.fromarray(rgba, "RGBA").resize((target, target), Image.Resampling.BOX)
-    return np.asarray(img, dtype=np.uint8)
+    return downscale_to(rgba, (target, target))
 
 
 def quantize(rgba: NDArray[np.uint8], max_colors: int) -> NDArray[np.uint8]:

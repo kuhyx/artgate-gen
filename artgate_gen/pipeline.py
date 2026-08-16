@@ -19,6 +19,8 @@ from diffusers.utils import logging as diffusers_logging
 from huggingface_hub import snapshot_download
 from transformers import logging as transformers_logging
 
+from artgate_gen.targets import ICON_NEGATIVE, ICON_STYLE
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
 
     from artgate_gen._types import Pipeline
     from artgate_gen.profiling import RunProfile
+    from artgate_gen.targets import Target
 
 MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 LORA = "nerijs/pixel-art-xl"
@@ -41,12 +44,12 @@ LORA_WEIGHTS = "pixel-art-xl.safetensors"
 # force_upcast=False, so neither cast happens and both warnings go away.
 VAE = "madebyollin/sdxl-vae-fp16-fix"
 
-# Verbatim from the bake-off run that produced the accepted icons.
-STYLE = "pixel art, game item icon, centered, plain black background, crisp"
-NEGATIVE = (
-    "photo, realistic, blurry, soft focus, gradient background, text, "
-    "watermark, multiple objects, hands, drop shadow"
-)
+# Re-exported from `targets`, which owns them alongside the backdrop variants
+# and is importable without torch. Kept as module-level names here because both
+# are part of this module's published surface and callers already import them.
+STYLE = ICON_STYLE
+NEGATIVE = ICON_NEGATIVE
+
 STEPS = 25
 GUIDANCE = 7.0
 
@@ -188,11 +191,31 @@ def _load_unet_lora(pipe: Pipeline, *, local_files_only: bool) -> None:
     )
 
 
-def generate(pipe: Pipeline, prompt: str, seed: int) -> Image.Image:
-    """Render one 1024px candidate for ``prompt``."""
+def generate(pipe: Pipeline, prompt: str, seed: int, target: Target) -> Image.Image:
+    """Render one candidate for ``prompt`` at ``target``'s render size.
+
+    The style stem, negative prompt and render size all travel together in the
+    ``Target`` record rather than as separate parameters. Passing them
+    individually would take this function to seven arguments against the
+    repo's ``max-args = 6``, and the three are never chosen independently: a
+    backdrop stem with an icon's render size is not a combination that means
+    anything.
+
+    Args:
+        pipe: The loaded diffusion pipeline.
+        prompt: The subject, appended to the target's style stem.
+        seed: Seed for the generator.
+        target: What is being rendered.
+
+    Returns:
+        One render at ``target.render``.
+    """
+    width, height = target.render
     result = pipe(
-        prompt=f"{STYLE}, {prompt}",
-        negative_prompt=NEGATIVE,
+        prompt=f"{target.style}, {prompt}",
+        negative_prompt=target.negative,
+        width=width,
+        height=height,
         num_inference_steps=STEPS,
         guidance_scale=GUIDANCE,
         generator=torch.Generator("cuda").manual_seed(seed),

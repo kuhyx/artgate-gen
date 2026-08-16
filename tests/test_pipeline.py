@@ -8,13 +8,18 @@ unprofiled load paths, the UNet-only LoRA application -- not to test diffusers.
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from typing import Any, cast
 
 from artgate_gen import pipeline
 from artgate_gen.profiling import RunProfile
+from artgate_gen.targets import TARGETS
 from tests.assertions import check, check_equal, check_length
 
 RENDER_EDGE = 64
+# Small on purpose: the real backdrop target renders at 2304x512, and no test
+# allocates a megapixel to prove that width and height are threaded separately.
+NON_SQUARE = (128, 32)
 SEED = 7
 
 
@@ -82,9 +87,24 @@ def test_load_pipeline_without_a_profile_times_nothing() -> None:
 def test_generate_returns_one_image() -> None:
     """Rendering yields a single image from the pipeline result."""
     pipe = pipeline.load_pipeline()
-    image = pipeline.generate(pipe, "a brass lantern", SEED)
+    # The target is explicit so this assertion stays about the stub's render
+    # size rather than about whatever the 64px icon target happens to render at.
+    target = replace(TARGETS[64, 64], render=(RENDER_EDGE, RENDER_EDGE))
+    image = pipeline.generate(pipe, "a brass lantern", SEED, target)
     check_equal(
         actual=image.size,
         expected=(RENDER_EDGE, RENDER_EDGE),
         message="the rendered image size",
+    )
+
+
+def test_generate_honours_a_non_square_target() -> None:
+    """A non-square target renders at its own width and height."""
+    pipe = pipeline.load_pipeline()
+    target = replace(TARGETS[256, 64], render=NON_SQUARE)
+    image = pipeline.generate(pipe, "a desert highway", SEED, target)
+    check_equal(
+        actual=image.size,
+        expected=NON_SQUARE,
+        message="the non-square rendered image size",
     )

@@ -151,6 +151,19 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["artgate_gen", "tools"]
 branch = true
+# The only exclusion in this project, and it is deliberately narrow. These are
+# one-off milestone drivers: each is a fixed list of prompts fed to a loaded
+# SDXL pipeline on a GPU, so "testing" one would mean asserting that a hard-coded
+# dict still contains what it is written to contain. Everything they call --
+# `generate`, both finishers, `wrap_blend`, `downscale_to`, `seam_probe` -- is
+# itself at 100%, so the untested part is only the prompt list and the loop.
+#
+# The pattern is `*session*` rather than `tools/*` on purpose: a general tools
+# exclusion would silently cover `check_line_cap.py` and `seam_probe.py`, both
+# of which are real code and both of which are fully covered today. If a future
+# driver is worth keeping past its milestone, the right move is to give it a
+# testable seam, not to widen this line.
+omit = ["tools/*session*.py"]
 
 [tool.coverage.report]
 fail_under = 100

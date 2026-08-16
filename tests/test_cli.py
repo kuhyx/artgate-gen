@@ -87,6 +87,24 @@ def test_malformed_subject_is_rejected(
         main()
 
 
+def test_unsupported_size_is_a_usage_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A size with no target fails cleanly instead of raising KeyError.
+
+    Before the target table this silently produced art at a size no spec could
+    gate, which is worse than refusing: it looks like a successful run.
+    """
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["generate.py", str(tmp_path), "axe=a stone axe", "--size", "48"],
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+
 def test_generation_writes_and_gates_an_icon(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
