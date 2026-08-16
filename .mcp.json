@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "artgate": {
+      "command": "artgate-gen-mcp"
+    }
+  }
+}

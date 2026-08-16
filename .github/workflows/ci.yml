@@ -1,0 +1,108 @@
+name: ci
+
+# The check job is budgeted at under 60 seconds from job start. It holds that
+# budget by never installing the ML stack: torch and friends are 1.3 GB and
+# ~28 s even from a warm cache, and the tests supply them from tests/stubs
+# instead. Everything installed here is a small pure-Python wheel, so cold
+# runs fit too.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Pinned ruff, not `pip install ruff`. An unpinned install once put CI on
+      # a newer ruff than the local one and failed a push that linted clean
+      # locally; green-local must mean green-CI. Bump deliberately.
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Cache mypy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ hashFiles('pyproject.toml', 'artgate_gen/**/*.py', 'tools/**/*.py') }}
+          restore-keys: mypy-
+
+      # Whole-repo, never a filename list. The previous workflow named seven
+      # files explicitly, so any file added afterwards was silently unlinted.
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .
+
+      - name: Types
+        run: mypy --strict artgate_gen tools tests generate.py mcp_server.py
+
+      - name: Tests
+        run: pytest
+
+      - name: Line cap
+        run: python tools/check_line_cap.py
+
+  shell:
+    # Its own job so it can never eat the check job's budget.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck
+        run: shellcheck run.sh
+
+  release:
+    # Exempt from the 60 s budget by design: this builds and verifies an
+    # installable artifact, which is inherently slower than linting.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, shell]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: |
+          pip install build
+          python -m build
+
+      # The wheel must work without the `generate` extra, or the gate tools are
+      # dead on arrival for anyone who installs it. Package data is the usual
+      # casualty: the style TOMLs ship inside the wheel, and nothing in the
+      # test suite would notice if they stopped.
+      - name: Smoke-test the wheel
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/python -c "
+          from pathlib import Path
+          import artgate_gen
+          from artgate_gen.gate.spec import load_spec
+          styles = Path(artgate_gen.__file__).parent / 'styles'
+          specs = sorted(styles.glob('*.toml'))
+          assert specs, 'style TOMLs are missing from the wheel'
+          for spec in specs:
+              load_spec(spec)
+          import artgate_gen.server
+          print(f'wheel OK: {len(specs)} specs, server imports')
+          "
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
