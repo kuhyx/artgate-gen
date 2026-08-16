@@ -23,9 +23,13 @@ Two findings from the bake-off are baked into the defaults:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
+import warnings
 from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -33,6 +37,11 @@ from diffusers import AutoencoderKL, DiffusionPipeline
 from diffusers.utils import logging as diffusers_logging
 from PIL import Image
 from transformers import logging as transformers_logging
+
+from profiling import RunProfile
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 sys.path.insert(0, "/home/kuhy/testsAndMisc")
 from python_pkg.artgate.finish import (
@@ -115,8 +124,44 @@ def strip_background(rgba: np.ndarray, tol: int = 60) -> np.ndarray:
     return out
 
 
-def load_pipeline() -> DiffusionPipeline:
-    """Load SDXL with the fp16-safe VAE and the pixel-art LoRA onto the GPU."""
+def quiet_hub() -> None:
+    """Silence two Hub messages that report on library internals, not on us.
+
+    Neither is emitted by anything in this repo, and neither is actionable:
+
+    * ``local_dir_use_symlinks``: diffusers passes this long-deprecated kwarg to
+      huggingface_hub itself. ``configuration_utils.py`` defaults it to
+      ``"auto"`` -- not ``None`` -- so the deprecation check fires on every load.
+      There is no call site here to fix; it goes away when diffusers stops
+      passing it.
+    * ``unauthenticated requests``: not a local message at all. It is a
+      ``Warning:`` HTTP header on the Hub's own response, echoed by
+      ``_http.py:_warn_on_warning_headers``. Setting ``HF_TOKEN`` removes it and
+      raises the rate limit; it costs ~1-2s per run and is otherwise harmless.
+
+    Why not offline mode, which would remove the requests rather than hide the
+    warning: ``fetch_model.py`` fetches with ``allow_patterns`` to skip the fp32,
+    ONNX and Flax duplicates, so the local snapshot is deliberately partial.
+    Both ``HF_HUB_OFFLINE=1`` and ``local_files_only=True`` reject a partial
+    snapshot outright (``IncompleteSnapshotError``), and completing it means
+    downloading **69.8 GB** of weights this pipeline never loads. Measured, not
+    assumed. The metadata round-trip is the cheaper trade.
+    """
+    for pattern in (".*local_dir_use_symlinks.*", ".*unauthenticated requests.*"):
+        warnings.filterwarnings("ignore", message=pattern)
+    # The Hub's echoed header goes through logging, not warnings.
+    logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
+
+
+def load_pipeline(profile: RunProfile | None = None) -> DiffusionPipeline:
+    """Load SDXL with the fp16-safe VAE and the pixel-art LoRA onto the GPU.
+
+    Args:
+        profile: When given, each load step is timed separately. The steps have
+            unrelated bottlenecks -- weights come off disk, the LoRA merge is
+            CPU, and ``.to("cuda")`` is a PCIe transfer -- so a single "load"
+            total cannot say which one moved.
+    """
     # Must be disabled before from_pretrained: pipe.set_progress_bar_config()
     # below only silences the *inference* bar, so the component-loading bars are
     # already drawn by then. With no TTY they redraw into one unreadable line.
@@ -124,17 +169,31 @@ def load_pipeline() -> DiffusionPipeline:
     # come from transformers, not diffusers.
     diffusers_logging.disable_progress_bar()
     transformers_logging.disable_progress_bar()
-    pipe = DiffusionPipeline.from_pretrained(
-        MODEL,
-        vae=AutoencoderKL.from_pretrained(VAE, torch_dtype=torch.float16),
-        torch_dtype=torch.float16,
-        variant="fp16",
-        use_safetensors=True,
-    )
-    _load_unet_lora(pipe)
-    pipe = pipe.to("cuda")
+    quiet_hub()
+
+    span = profile.phase if profile is not None else _null_span
+    with span("load:vae"):
+        vae = AutoencoderKL.from_pretrained(VAE, torch_dtype=torch.float16)
+    with span("load:pipeline"):
+        pipe = DiffusionPipeline.from_pretrained(
+            MODEL,
+            vae=vae,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True,
+        )
+    with span("load:lora"):
+        _load_unet_lora(pipe)
+    with span("load:to_cuda"):
+        pipe = pipe.to("cuda")
     pipe.set_progress_bar_config(disable=True)
     return pipe
+
+
+@contextmanager
+def _null_span(_name: str, **_detail: object) -> Iterator[None]:
+    """Stand in for ``RunProfile.phase`` when profiling is off."""
+    yield
 
 
 def _load_unet_lora(pipe: DiffusionPipeline) -> None:
@@ -199,6 +258,17 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=11, help="base seed")
     parser.add_argument("--keep-raw", action="store_true", help="also save 1024px")
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="report where the time went, plus peak GPU/RAM/load",
+    )
+    parser.add_argument(
+        "--profile-json",
+        type=Path,
+        default=None,
+        help="also write the full timing trace to this file",
+    )
     args = parser.parse_args()
 
     pairs = []
@@ -213,18 +283,28 @@ def main() -> None:
     if args.keep_raw:
         raw_dir.mkdir(parents=True, exist_ok=True)
 
-    pipe = load_pipeline()
-    for name, prompt in pairs:
-        for c in range(args.candidates):
-            seed = args.seed + c
-            image = generate(pipe, prompt, seed)
-            suffix = "" if args.candidates == 1 else f"_{c}"
-            if args.keep_raw:
-                image.save(raw_dir / f"{name}{suffix}.png")
-            finish(image, args.size, args.colours).save(
-                args.out / f"{name}{suffix}.png"
-            )
-            print(f"generated {name}{suffix} (seed {seed})", flush=True)
+    with RunProfile() as profile:
+        pipe = load_pipeline(profile)
+        for name, prompt in pairs:
+            for c in range(args.candidates):
+                seed = args.seed + c
+                suffix = "" if args.candidates == 1 else f"_{c}"
+                # Timed separately: denoising is GPU-bound and the finisher is a
+                # pure-Python flood fill over a megapixel, so lumping them
+                # together hides which one actually costs.
+                with profile.phase(f"render:{name}{suffix}", seed=seed):
+                    image = generate(pipe, prompt, seed)
+                if args.keep_raw:
+                    image.save(raw_dir / f"{name}{suffix}.png")
+                with profile.phase(f"finish:{name}{suffix}"):
+                    finished = finish(image, args.size, args.colours)
+                finished.save(args.out / f"{name}{suffix}.png")
+                print(f"generated {name}{suffix} (seed {seed})", flush=True)
+
+    if args.profile:
+        print(profile.report(), flush=True)
+    if args.profile_json:
+        profile.write_json(args.profile_json)
 
 
 if __name__ == "__main__":

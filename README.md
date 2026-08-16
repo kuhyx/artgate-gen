@@ -14,6 +14,7 @@ gate-passing pixel icon using the finisher in `~/testsAndMisc`
 ./run.sh ./icons "lantern=a brass lantern with a lit wick"
 ./run.sh --setup-only          # just prepare the environment
 ./run.sh -c 3 ./icons "crown=a golden crown with red jewels"   # 3 seeds, pick one
+./run.sh --profile ./icons "cat=a black cat"   # where the time went + peak GPU/RAM
 
 # Or drive the generator directly once set up
 ./venv/bin/python generate.py <outdir> "lantern=a brass lantern with a lit wick"
@@ -29,6 +30,27 @@ Also registered as the `artgate` MCP server (`mcp_server.py`), which generates
 
 Defaults are the bake-off-winning settings: 64px, 32 colours, seed 11, 25
 steps, guidance 7.0.
+
+## Profiling
+
+`--profile` breaks the run into phases and reports peak GPU/RSS/load, because
+"it feels slower" is not actionable and one wall-clock total cannot say which
+phase moved. `--profile-json <path>` (on `generate.py`) writes the full trace,
+including the sample series, for comparing runs over time.
+
+Typical one-icon run on a 3090 (~15s total):
+
+| phase | ~time | bound by |
+|---|---|---|
+| `load:vae` / `load:pipeline` | 1.5s | disk, plus a Hub metadata check |
+| `load:lora` | 2.2s | CPU — merging 6498 modules into the UNet |
+| `load:to_cuda` | 1.5s | PCIe transfer |
+| `render:<name>` | 9.1s | GPU — 25 denoising steps at 1024px |
+| `finish:<name>` | 0.8s | CPU — the pure-Python border flood fill |
+
+Model load is paid once per process, so it amortises: generating N subjects in
+one invocation costs roughly `5s + N * 10s`, which is why batching subjects into
+a single call beats calling `run.sh` once per icon.
 
 ## Why it lives here and not in testsAndMisc
 

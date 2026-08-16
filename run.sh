@@ -24,6 +24,7 @@ OUT_DIR=""
 SIZE=64
 CANDIDATES=1
 SETUP_ONLY=0
+PROFILE=0
 SUBJECTS=()
 
 usage() {
@@ -36,6 +37,7 @@ Options:
   -s, --size N          Icon edge in pixels: 64 (default) or 32
   -c, --candidates N    Renders per subject, each with its own seed (default 1)
       --setup-only      Install dependencies and the model, then exit
+      --profile         Report where the time went, plus peak GPU/RAM/load
   -h, --help            Show this help
 
 Examples:
@@ -164,8 +166,9 @@ main() {
     fi
 
     log "Generating ${#SUBJECTS[@]} subject(s) at ${SIZE}px"
-    "$PY" "$SCRIPT_DIR/generate.py" "$OUT_DIR" "${SUBJECTS[@]}" \
-        --size "$SIZE" --candidates "$CANDIDATES"
+    local gen_args=(--size "$SIZE" --candidates "$CANDIDATES")
+    [[ $PROFILE -eq 1 ]] && gen_args+=(--profile)
+    "$PY" "$SCRIPT_DIR/generate.py" "$OUT_DIR" "${SUBJECTS[@]}" "${gen_args[@]}"
 
     log "Gating output"
     local spec="python_pkg/artgate/styles/pixel_icon_64.toml"
@@ -208,6 +211,7 @@ while [[ $# -gt 0 ]]; do
         -s|--size)       SIZE="$2"; shift 2 ;;
         -c|--candidates) CANDIDATES="$2"; shift 2 ;;
         --setup-only)    SETUP_ONLY=1; shift ;;
+        --profile)       PROFILE=1; shift ;;
         -h|--help)       usage ;;
         -*)              echo "Unknown option: $1" >&2; exit 1 ;;
         *)
