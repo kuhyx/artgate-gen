@@ -17,7 +17,7 @@ import anyio
 import numpy as np
 from PIL import Image
 
-from artgate_gen import server
+from artgate_gen import generation, server
 from tests.assertions import check, check_equal, check_length
 
 if TYPE_CHECKING:
@@ -119,8 +119,8 @@ def test_describe_icon_measures_without_a_model(tmp_path: Path) -> None:
 
 def test_model_status_reports_an_unloaded_pipeline() -> None:
     """With nothing resident the status says so."""
-    server.state.pipe = None
-    server.state.last_used = 0.0
+    generation.state.pipe = None
+    generation.state.last_used = 0.0
     status = server.model_status()
     check(condition=not status["loaded"], message="nothing is resident")
     check(condition=status["idle_seconds"] is None, message="no idle time yet")
@@ -128,15 +128,15 @@ def test_model_status_reports_an_unloaded_pipeline() -> None:
 
 def test_model_status_reports_a_loaded_pipeline() -> None:
     """A resident pipeline reports its idle time."""
-    server.state.pipe = object()
-    server.state.last_used = time.time()
+    generation.state.pipe = object()
+    generation.state.last_used = time.time()
     try:
         status = server.model_status()
         check(condition=status["loaded"], message="the pipeline is resident")
         check(condition=status["idle_seconds"] is not None, message="idle is reported")
     finally:
-        server.state.pipe = None
-        server.state.last_used = 0.0
+        generation.state.pipe = None
+        generation.state.last_used = 0.0
 
 
 def test_generate_icons_writes_gates_and_summarises(tmp_path: Path) -> None:
@@ -149,7 +149,7 @@ def test_generate_icons_writes_gates_and_summarises(tmp_path: Path) -> None:
     check_length(sized=result["icons"], expected=1, message="one icon was produced")
     check(condition="passed the" in result["summary"], message="a summary is returned")
     check(condition=(tmp_path / "axe.png").exists(), message="the icon was written")
-    server.state.pipe = None
+    generation.state.pipe = None
 
 
 def test_generate_icons_keeps_raw_renders(tmp_path: Path) -> None:
@@ -164,7 +164,7 @@ def test_generate_icons_keeps_raw_renders(tmp_path: Path) -> None:
         condition=(tmp_path / "raw" / "axe.png").exists(),
         message="the raw render was kept",
     )
-    server.state.pipe = None
+    generation.state.pipe = None
 
 
 def test_generate_icons_suffixes_multiple_candidates(tmp_path: Path) -> None:
@@ -178,17 +178,17 @@ def test_generate_icons_suffixes_multiple_candidates(tmp_path: Path) -> None:
     check_length(sized=result["icons"], expected=2, message="two candidates")
     seeds = {icon["seed"] for icon in result["icons"]}
     check_length(sized=seeds, expected=2, message="each candidate has its own seed")
-    server.state.pipe = None
+    generation.state.pipe = None
 
 
 def test_pipeline_is_loaded_once_and_reused(tmp_path: Path) -> None:
     """The pipeline is cached between calls rather than reloaded per icon."""
-    server.state.pipe = None
+    generation.state.pipe = None
     server.generate_icons(str(tmp_path), {"axe": "an axe"}, size=EDGE_32)
-    first = server.state.pipe
+    first = generation.state.pipe
     server.generate_icons(str(tmp_path), {"bow": "a bow"}, size=EDGE_32)
-    check(condition=server.state.pipe is first, message="the pipeline was reused")
-    server.state.pipe = None
+    check(condition=generation.state.pipe is first, message="the pipeline was reused")
+    generation.state.pipe = None
 
 
 def test_main_starts_the_watcher_and_serves(monkeypatch: pytest.MonkeyPatch) -> None:

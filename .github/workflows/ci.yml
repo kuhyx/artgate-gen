@@ -28,13 +28,6 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
-      - name: Cache mypy
-        uses: actions/cache@v4
-        with:
-          path: .mypy_cache
-          key: mypy-${{ hashFiles('pyproject.toml', 'artgate_gen/**/*.py', 'tools/**/*.py') }}
-          restore-keys: mypy-
-
       # Whole-repo, never a filename list. The previous workflow named seven
       # files explicitly, so any file added afterwards was silently unlinted.
       - name: Lint
@@ -42,6 +35,16 @@ jobs:
 
       - name: Format
         run: ruff format --check .
+
+      # The cache key must cover EVERY file mypy checks. An earlier key listed
+      # only artgate_gen and tools, so edits under tests/ reused a stale cache
+      # and hid a real strict-mode failure. A cold run is ~35s, which would eat
+      # most of the 60s budget, so the cache stays -- keyed correctly.
+      - name: Cache mypy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ hashFiles('pyproject.toml', 'artgate_gen/**/*.py', 'tools/**/*.py', 'tests/**/*.py', 'generate.py', 'mcp_server.py') }}
 
       - name: Types
         run: mypy --strict artgate_gen tools tests generate.py mcp_server.py
