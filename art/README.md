@@ -31,6 +31,50 @@ correctly. Known failures, kept rather than hidden:
 only at the silhouette level: the prompt's glowing eyes and sticking-out tongue
 are both lost at 64px. A face-level detail is below what this pipeline resolves.
 
+> **Refined 2026-08-16.** That last sentence was too general, and it cost a
+> milestone's worth of doubt about whether this pipeline could render a face at
+> all. It can. What does not survive is **detail below roughly 1/8 of the
+> canvas** — the cat's eyes are small features on a whole-body subject, whereas
+> a portrait spends the entire canvas on the face.
+
+## Portraits and backdrops (2026-08-16)
+
+Added with the non-square render path. Everything below comes from human review
+of real output, not from the gates — which, as stated above, do not judge
+whether art looks good.
+
+**Portraits need 256px.** 64px passes every gate and reads as "a face", but
+manual review found it unusable, and 128 too. Generate at 1024, downscale to
+256, and leave it **unquantised** — a 32-colour cap eats facial detail.
+
+Three prompt findings, each from rejected output:
+
+- **Three-quarter framing beats front-facing.** `"front facing"` produced flat,
+  interchangeable faces; `"three-quarter view"` was markedly better on every
+  expression.
+- **Open-mouth smiles read as creepy.** At pixel resolution teeth become an
+  undifferentiated pale block; 3 of 9 portraits were rejected for this alone.
+  Use `"faint closed-mouth smile"`. The toothy version stays genuinely useful
+  for deliberately uncanny work — it just has to be chosen, not stumbled into.
+- **A fixed seed holds character identity** across changed expression clauses,
+  verified over three seeds x three expressions. Pick one seed per character
+  and vary only the expression clause.
+
+**Do not use `ICON_STYLE` for a portrait**: "game item icon, centered, plain
+black background" describes an object on a void, not a face.
+
+**The backdrop wrap overlap is 512px, not 256.** At 256 the worst seam across
+nine real renders measured 6.01 against a 4.0 threshold — and the failing strip
+looked fine by eye, which is precisely why the metric exists. At 512 the same
+nine measured 2.27 worst. Measure with `tools/seam_probe.py`; never substitute
+a different metric.
+
+**Record prompt + seed for everything, including experiments.** A PNG whose
+recipe is lost cannot be varied, fixed or regenerated. In this session a raw
+render was overwritten and the exact image behind a reported number became
+unrecoverable. `~/roadside-assistance/tools/artgen.py` is a manifest
+implementation whose recipes are verified to reproduce images bit-for-bit.
+
 ## Contact sheets worth reading
 
 - `SIZE_COMPARE.png` — the same subjects at 32/48/64px. This is why 64px is the
