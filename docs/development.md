@@ -23,8 +23,15 @@ python tools/check_line_cap.py
 shellcheck run.sh
 ```
 
-Under two seconds end to end. The same commands run in CI, so a clean local
-gate means a green build.
+Under two seconds end to end locally. The same commands run in CI, where the
+check job is measured at **24s warm and 37s cold** — both inside the 60s
+budget the workflow is written to.
+
+The mypy cache key covers every path mypy is given, `tests/` included. An
+earlier key omitted it, so editing a test reused a cache computed before the
+edit and hid a real strict-mode failure until CI caught it. A cold
+`mypy --strict` over this tree is ~35s, so the cache earns its place — but
+only if it invalidates correctly.
 
 ## Three rules that shape the code
 
@@ -77,5 +84,3 @@ inside it and that the server imports, then attaches both to a GitHub Release.
 That smoke test exists because package data is the usual casualty of a
 restructure: the style TOMLs live inside the wheel, and nothing in the test
 suite would notice if they stopped shipping.
-
-<!-- touch to measure a warm-cache CI run -->
