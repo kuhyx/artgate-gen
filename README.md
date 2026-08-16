@@ -54,6 +54,22 @@ turns to mush. The same source survives at 64.
 about 7 GB and is dropped after ten idle minutes, so the first call after an
 unload pays a ~40 s load. One call with ten subjects costs that once.
 
+**For a set of one character — expressions, poses, variants — render one base
+image and inpaint the region that changes.** Do not re-run the whole prompt
+with a different clause per variant. Re-rolling re-conditions the entire
+generation, so every attribute the prompt does not pin is re-invented: measured
+across six seeds, accessories changed colour, garments gained and lost detail
+and hair changed colour outright. Pinning identity in the prompt was tried
+extensively and did not hold. With a mask, every pixel outside it is copied
+from the base, so identity is invariant *by construction*.
+
+The loaded `lpw_stable_diffusion_xl` already exposes `inpaint`, `mask_image`
+and `strength`. Locate the mask from the image rather than a fixed box,
+feather it (~12px at 1024; a hard edge seams once downscaled), keep anything
+that must not drift *outside* it, and repaint at strength ~0.9 — identity is
+protected by the mask, not by a timid strength. See
+`artgate_gen/set_difference.py` for the landmark maths that locates a face.
+
 ## Documentation
 
 - [Usage](docs/usage.md) — CLI flags, MCP registration, model caching
