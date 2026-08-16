@@ -52,6 +52,11 @@ from python_pkg.artgate.finish import (
 
 MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 LORA = "nerijs/pixel-art-xl"
+# Named explicitly rather than left to diffusers' _best_guess_weight_name: that
+# helper inspects the repo listing to pick a file, and refuses outright under
+# local_files_only ("you must specify a `weight_name`"). Guessing works online
+# and fails offline, so the name is pinned to keep both paths identical.
+LORA_WEIGHTS = "pixel-art-xl.safetensors"
 # SDXL's stock VAE overflows in fp16, so it ships `force_upcast=True`: diffusers
 # casts it to fp32 before every decode and back to fp16 afterwards, via a method
 # it has itself deprecated. That is two `.to()` calls per image, each emitting a
@@ -235,6 +240,7 @@ def _load_unet_lora(pipe: DiffusionPipeline, *, local_files_only: bool) -> None:
     """
     state_dict, alphas, metadata = type(pipe).lora_state_dict(
         LORA,
+        weight_name=LORA_WEIGHTS,
         unet_config=pipe.unet.config,
         return_lora_metadata=True,
         local_files_only=local_files_only,
