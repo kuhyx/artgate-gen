@@ -334,8 +334,14 @@ def main() -> None:
                     image.save(raw_dir / f"{name}{suffix}.png")
                 with profile.phase(f"finish:{name}{suffix}"):
                     finished = finish(image, args.size, args.colours)
-                finished.save(args.out / f"{name}{suffix}.png")
-                print(f"generated {name}{suffix} (seed {seed})", flush=True)
+                out_path = (args.out / f"{name}{suffix}.png").resolve()
+                finished.save(out_path)
+                # Absolute file:// URL so the terminal makes it clickable and
+                # the icon can be opened without hunting for the output dir.
+                print(
+                    f"generated {name}{suffix} (seed {seed}) -> {out_path.as_uri()}",
+                    flush=True,
+                )
 
     if args.profile:
         print(profile.report(), flush=True)

@@ -54,6 +54,18 @@ EOF
 
 log() { printf '==> %s\n' "$1"; }
 
+# A file:// URL for a path. Terminals hyperlink these, so the caller does not
+# have to go looking for the output directory to see what was generated.
+#
+# Delegates to Path.as_uri() rather than pasting "file://" onto realpath: an
+# icon name may contain a space (subject names come straight from the CLI, so
+# "fire sword=..." yields "fire sword.png"), and a raw space truncates the
+# hyperlink in every terminal. This is also exactly what generate.py prints,
+# so the two agree by construction instead of by coincidence.
+file_url() {
+    "$PY" -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' "$1"
+}
+
 install_uv() {
     if command -v uv >/dev/null 2>&1; then
         return
@@ -174,18 +186,21 @@ main() {
     local spec="python_pkg/artgate/styles/pixel_icon_64.toml"
     [[ "$SIZE" == "32" ]] && spec="python_pkg/artgate/styles/pixel_icon.toml"
     local passed=0 total=0 repaired=0
+    local passed_urls=()
     for icon in "$OUT_DIR"/*.png; do
         [[ -f "$icon" ]] || continue
         total=$((total + 1))
         REPAIR_OUTPUT=""  # per-icon, or a stale message follows the next failure
         if gate_one "$icon" "$spec"; then
             passed=$((passed + 1))
+            passed_urls+=("$(file_url "$icon")")
         elif repair_one "$icon" "$spec" && gate_one "$icon" "$spec"; then
             passed=$((passed + 1))
             repaired=$((repaired + 1))
+            passed_urls+=("$(file_url "$icon")")
             echo "    repaired: $icon"
         else
-            printf '    gate FAILED: %s\n' "$icon"
+            printf '    gate FAILED: %s\n' "$(file_url "$icon")"
             # Print the verdict rather than discarding it. The previous version
             # sent stderr to /dev/null, which hid "cannot read image" and made a
             # path bug look like an art failure for every icon.
@@ -204,6 +219,14 @@ main() {
     fi
     log "Gates check canvas/palette/alpha/margin/contrast, NOT whether the art"
     log "looks good. Look at the icons before calling them done."
+    # Last thing on screen on purpose: the reminder above says to look at the
+    # icons, so the links to open them belong directly under it.
+    if [[ ${#passed_urls[@]} -gt 0 ]]; then
+        local url
+        for url in "${passed_urls[@]}"; do
+            printf '    %s\n' "$url"
+        done
+    fi
 }
 
 while [[ $# -gt 0 ]]; do

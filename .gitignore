@@ -3,3 +3,7 @@
 venv/
 __pycache__/
 *.log
+
+# Scratch output dir used by the README's example command. Art worth keeping
+# is curated under art/ instead; see art/README.md.
+icons/

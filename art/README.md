@@ -6,7 +6,7 @@ reference for what this pipeline actually produces — including its failures.
 
 | Directory | What it is |
 |---|---|
-| `icons-64px/` | 30 finished icons at 64px, the recommended size. All pass `pixel_icon_64.toml`. |
+| `icons-64px/` | 31 finished icons at 64px, the recommended size. All pass `pixel_icon_64.toml`. |
 | `icons-32px/` | 18 at 32px, passing `pixel_icon.toml`. Kept to show what the 32x downscale costs. |
 | `raw-1024px/` | The unfinished SDXL renders behind 18 of the icons. Often better than any downscale of them. |
 | `contact-sheets/` | Comparison sheets from the bake-off and the size/background experiments. |
@@ -26,6 +26,10 @@ correctly. Known failures, kept rather than hidden:
   retry was rejected by the gate for `MARGIN_TOO_SMALL`, so the original stands.
 
 `apple` was recovered by retrying: the first render was a whole tree.
+
+`cat` (the one non-item subject) reads correctly as a sitting black cat, but
+only at the silhouette level: the prompt's glowing eyes and sticking-out tongue
+are both lost at 64px. A face-level detail is below what this pipeline resolves.
 
 ## Contact sheets worth reading
 
