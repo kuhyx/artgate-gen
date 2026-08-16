@@ -77,3 +77,5 @@ inside it and that the server imports, then attaches both to a GitHub Release.
 That smoke test exists because package data is the usual casualty of a
 restructure: the style TOMLs live inside the wheel, and nothing in the test
 suite would notice if they stopped shipping.
+
+<!-- touch to measure a warm-cache CI run -->
