@@ -77,6 +77,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A tag that disagrees with pyproject.toml ships artifacts whose
+      # filenames contradict the release they are attached to -- v0.1.1 built
+      # a wheel named 0.1.0 exactly once before this check existed.
+      - name: Version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          declared="$(python -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
+          ")"
+          if [ "$tag" != "$declared" ]; then
+            echo "tag $tag does not match pyproject version $declared" >&2
+            exit 1
+          fi
+          echo "version $declared matches tag $GITHUB_REF_NAME"
+
       - name: Build
         run: |
           pip install build
