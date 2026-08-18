@@ -2,13 +2,14 @@
 # decision: a strip only tiles horizontally on screen). Session 2 added a
 # vertical check to the shipped SEAM_ENERGY gate at the same threshold, so
 # a PASS here does not guarantee `artgate gate` passes: desert-dusk_s1
-# reads PASS below (h=0.33) but FAILS the shipped gate on v=5.60.
-# Authoritative verdicts: `artgate_gen.gate.cli` against
-# styles/backdrop_strip.toml, not this file.
+# reads PASS below (h=0.40) but FAILS the shipped gate on v=5.71 -- reverted
+# to its session-1 art after texture-prompt fixes could not close the gap;
+# see art/README.md for what was tried. Authoritative verdicts:
+# `artgate_gen.gate.cli` against styles/backdrop_strip.toml, not this file.
 threshold 4.0
 
 PASS  h=  0.48  v=  3.21  desert-dusk_s0.png
-PASS  h=  0.33  v=  5.60  desert-dusk_s1.png
+PASS  h=  0.40  v=  5.71  desert-dusk_s1.png
 PASS  h=  1.30  v=  2.29  desert-dusk_s2.png
 PASS  h=  0.46  v=  1.05  desert-night_s0.png
 PASS  h=  1.06  v=  2.04  desert-night_s1.png

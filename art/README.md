@@ -75,6 +75,41 @@ render was overwritten and the exact image behind a reported number became
 unrecoverable. `~/roadside-assistance/tools/artgen.py` is a manifest
 implementation whose recipes are verified to reproduce images bit-for-bit.
 
+## SEAM_ENERGY vertical axis (2026-08-18)
+
+Session 2 added a vertical check to SEAM_ENERGY, same 4.0 threshold as the
+existing horizontal one. It retroactively failed 4 of the 9 backdrop strips
+above: a smooth sky-to-ground gradient scores a large luma jump between the
+top and bottom row (`seam_v`) while carrying very little interior row-to-row
+texture (`inner_v`), and the ratio blows past threshold even though nothing
+about the strip reads as a seam by eye. Storm strips (clouds, rain, rock
+detail) passed 3/3 without changes; desert-dusk failed 3/3, desert-night 1/3.
+
+Fix that worked: **add interior texture to the prompt** (scattered clouds,
+layered ridgelines, foreground rock/scrub detail), which raises `inner_v`
+without flattening the brightness gap that `NO_VERTICAL_STRUCTURE` depends
+on. Confirmed NOT working: pixel-level post-processing (a vertical taper
+analogous to the horizontal `wrap_blend`) — the row0-vs-row63 comparison is
+too indirect for a local blend to move predictably; two prototypes moved
+some strips the right way and others the wrong way with no stable pattern,
+and were discarded rather than shipped.
+
+Three texture-prompt passes fixed desert-dusk_s0, desert-dusk_s2 and
+desert-night_s2. **desert-dusk_s1 did not close** (v stayed at 5.6-6.1
+across all three attempts, and its `inner_v` even moved the wrong direction
+on the third, most heavily-texture-worded pass) and was left on its
+session-1 art rather than kept as an unaccepted, still-failing re-render.
+Reported as an open finding, not solved: this specific seed/prompt
+combination may have a real ceiling below what interior texture alone can
+raise `inner_v` to, at this resolution and pipeline.
+
+Also measured: rendering is byte-identical within one process (same
+prompt+seed twice, max pixel diff 0), but the same prompt+seed measured
+~0.5 different in `v` across two separate process invocations — a real,
+if modest, cross-process variance source. Strips passing with less than
+~0.5 of margin (desert-night_s2 at v=3.52) should be treated as marginal,
+not settled.
+
 ## Contact sheets worth reading
 
 - `SIZE_COMPARE.png` — the same subjects at 32/48/64px. This is why 64px is the
