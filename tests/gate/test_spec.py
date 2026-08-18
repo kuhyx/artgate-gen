@@ -72,8 +72,8 @@ class TestValidSpec:
             condition=spec.runs(Code.OFF_PALETTE), message="spec.runs(Code.OFF_PALETTE)"
         )
         check(
-            condition=not spec.runs(Code.SEAM_ENERGY),
-            message="not spec.runs(Code.SEAM_ENERGY)",
+            condition=not spec.runs(Code.QUADRANT_WEIGHT),
+            message="not spec.runs(Code.QUADRANT_WEIGHT)",
         )
 
     def test_defaults_when_optional_fields_absent(self, tmp_path: Path) -> None:
@@ -168,7 +168,7 @@ class TestFailClosed:
 
     def test_unimplemented_gate_is_rejected(self, tmp_path: Path) -> None:
         """A gate with no implementation cannot be declared."""
-        body = 'name = "m"\ngates = ["SEAM_ENERGY"]\n'
+        body = 'name = "m"\ngates = ["QUADRANT_WEIGHT"]\n'
         with pytest.raises(SpecError, match="not implemented"):
             load_spec(_write(tmp_path, body))
 

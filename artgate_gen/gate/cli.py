@@ -20,6 +20,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
+from artgate_gen.gate.backdrop import (
+    check_fully_opaque,
+    check_letterbox,
+    check_seam_energy,
+    check_vertical_structure,
+)
 from artgate_gen.gate.codes import (
     EXIT_GATE_FAILURE,
     EXIT_HARNESS_ERROR,
@@ -88,6 +94,14 @@ def evaluate(rgba: np.ndarray, spec: TargetSpec) -> list[Code]:
         ),
         (Code.SILHOUETTE_LOW_CONTRAST, lambda: check_silhouette(rgba)),
         (Code.MARGIN_TOO_SMALL, lambda: check_margin(rgba, spec.min_margin)),
+        # Backdrop-only gates. FULLY_OPAQUE_REQUIRED comes first of this
+        # block: the luma-based checks below it are meaningless on an image
+        # with no opaque pixels, the same reason ALPHA_NOT_BINARY precedes
+        # TOO_MANY_COLORS above.
+        (Code.FULLY_OPAQUE_REQUIRED, lambda: check_fully_opaque(rgba)),
+        (Code.LETTERBOX_BARS, lambda: check_letterbox(rgba)),
+        (Code.NO_VERTICAL_STRUCTURE, lambda: check_vertical_structure(rgba)),
+        (Code.SEAM_ENERGY, lambda: check_seam_energy(rgba)),
     ]
 
     failures: list[Code] = []

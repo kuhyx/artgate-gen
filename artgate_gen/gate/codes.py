@@ -48,6 +48,9 @@ class Code(StrEnum):
     STATIC_ANIMATION = "STATIC_ANIMATION"
     LICENSE_NOT_PERMISSIVE = "LICENSE_NOT_PERMISSIVE"
     LICENSE_AMBIGUOUS = "LICENSE_AMBIGUOUS"
+    FULLY_OPAQUE_REQUIRED = "FULLY_OPAQUE_REQUIRED"
+    LETTERBOX_BARS = "LETTERBOX_BARS"
+    NO_VERTICAL_STRUCTURE = "NO_VERTICAL_STRUCTURE"
 
     def __str__(self) -> str:
         """Return the bare code, so f-strings do not leak ``Code.`` prefixes."""
@@ -70,6 +73,10 @@ DECLARABLE: Final = frozenset(
         Code.SCALE_NOT_INVARIANT,
         Code.SILHOUETTE_LOW_CONTRAST,
         Code.MARGIN_TOO_SMALL,
+        Code.FULLY_OPAQUE_REQUIRED,
+        Code.LETTERBOX_BARS,
+        Code.NO_VERTICAL_STRUCTURE,
+        Code.SEAM_ENERGY,
     }
 )
 
