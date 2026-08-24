@@ -16,7 +16,7 @@ readonly SCRIPT_NAME="${0##*/}"
 readonly VENV="$SCRIPT_DIR/venv"
 readonly PY="$VENV/bin/python"
 OUT_DIR=""
-SIZE=64
+SIZE="64"
 CANDIDATES=1
 SETUP_ONLY=0
 PROFILE=0
@@ -29,7 +29,7 @@ Usage: $SCRIPT_NAME [OPTIONS] <outdir> "name=description" ["name=description" ..
 Sets up the environment if needed, then generates gate-passing item icons.
 
 Options:
-  -s, --size N          Icon edge in pixels: 64 (default) or 32
+  -s, --size N          Icon edge in pixels (64, default, or 32), or WxH e.g. 256x64
   -c, --candidates N    Renders per subject, each with its own seed (default 1)
       --setup-only      Install dependencies and the model, then exit
       --profile         Report where the time went, plus peak GPU/RAM/load
@@ -59,6 +59,12 @@ log() { printf '==> %s\n' "$1"; }
 # so the two agree by construction instead of by coincidence.
 file_url() {
     "$PY" -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' "$1"
+}
+
+# Resolved against `TARGETS` rather than re-derived here; prints nothing on
+# an unrecognised size, which the caller turns into a usage error.
+spec_name_for_size() {
+    "$PY" "$SCRIPT_DIR/tools/spec_for_size.py" "$1"
 }
 
 install_uv() {
@@ -165,14 +171,19 @@ main() {
         exit 1
     fi
 
-    log "Generating ${#SUBJECTS[@]} subject(s) at ${SIZE}px"
+    log "Generating ${#SUBJECTS[@]} subject(s) at $SIZE"
     local gen_args=(--size "$SIZE" --candidates "$CANDIDATES")
     [[ $PROFILE -eq 1 ]] && gen_args+=(--profile)
     "$PY" "$SCRIPT_DIR/generate.py" "$OUT_DIR" "${SUBJECTS[@]}" "${gen_args[@]}"
 
     log "Gating output"
-    local spec="$SCRIPT_DIR/artgate_gen/styles/pixel_icon_64.toml"
-    [[ "$SIZE" == "32" ]] && spec="$SCRIPT_DIR/artgate_gen/styles/pixel_icon.toml"
+    local spec_name
+    spec_name="$(spec_name_for_size "$SIZE")"
+    if [[ -z "$spec_name" ]]; then
+        echo "Error: no target for size $SIZE" >&2
+        exit 1
+    fi
+    local spec="$SCRIPT_DIR/artgate_gen/styles/$spec_name"
     local passed=0 total=0 repaired=0
     local passed_urls=()
     for icon in "$OUT_DIR"/*.png; do
@@ -201,9 +212,9 @@ main() {
         fi
     done
     if [[ $repaired -gt 0 ]]; then
-        log "$passed/$total passed the ${SIZE}px gate ($repaired after auto-repair)"
+        log "$passed/$total passed the $SIZE gate ($repaired after auto-repair)"
     else
-        log "$passed/$total passed the ${SIZE}px gate"
+        log "$passed/$total passed the $SIZE gate"
     fi
     log "Gates check canvas/palette/alpha/margin/contrast, NOT whether the art"
     log "looks good. Look at the icons before calling them done."

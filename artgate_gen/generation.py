@@ -13,7 +13,6 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from artgate_gen.finish import finish
 from artgate_gen.gating import gate
 from artgate_gen.targets import TARGETS
 from artgate_gen.unload import PipelineState
@@ -55,8 +54,14 @@ def generate_icons(
         ),
     ],
     size: Annotated[
-        int,
-        Field(description="Icon edge in pixels. 64 (recommended) or 32."),
+        int | list[int],
+        Field(
+            description=(
+                "Icon edge in pixels (64, recommended, or 32), or [width, "
+                "height] for a non-square target, e.g. [256, 64] for a "
+                "parallax backdrop strip."
+            ),
+        ),
     ] = 64,
     candidates: Annotated[
         int,
@@ -88,7 +93,8 @@ def generate_icons(
         out_dir: Directory to write icons into; created if absent.
         subjects: Map of icon name to a description of the object, e.g.
             ``{"lantern": "a brass lantern with a lit wick"}``.
-        size: Icon edge in pixels. 64 (default, recommended) or 32.
+        size: Icon edge in pixels. 64 (default, recommended) or 32, or
+            ``[width, height]`` for a non-square target such as ``[256, 64]``.
         candidates: Renders per subject, each with its own seed. The hit rate
             is not 1.0 -- ask for 3 when quality matters and pick.
         seed: Base seed; candidate *n* uses ``seed + n``.
@@ -106,16 +112,18 @@ def generate_icons(
     if keep_raw:
         raw_dir.mkdir(parents=True, exist_ok=True)
 
+    canvas = (size, size) if isinstance(size, int) else (size[0], size[1])
+
     # Derived from `size` rather than taken as a parameter: `generate_icons`
     # is already at the repo's six-argument limit, and those six are the MCP
     # tool's published schema. An unsupported size returns an error rather than
     # raising KeyError at the MCP boundary.
-    target = TARGETS.get((size, size))
+    target = TARGETS.get(canvas)
     if target is None:
-        sizes = sorted(w for w, h in TARGETS if w == h)
         return {
             "icons": [],
-            "summary": f"no target for size {size}; supported sizes are {sizes}",
+            "summary": f"no target for size {canvas}; supported sizes are "
+            f"{sorted(TARGETS)}",
         }
 
     pipe = pipeline()
@@ -127,20 +135,20 @@ def generate_icons(
             if keep_raw:
                 image.save(raw_dir / f"{name}{suffix}.png")
             path = out / f"{name}{suffix}.png"
-            finish(image, size).save(path)
+            target.finisher(image, canvas, target.max_colors).save(path)
             results.append(
                 {
                     "name": f"{name}{suffix}",
                     "path": str(path),
                     "seed": seed + candidate,
-                    **gate(path, size),
+                    **gate(path, canvas),
                 },
             )
 
     passed = sum(1 for result in results if result.get("passed"))
     return {
         "icons": results,
-        "summary": f"{passed}/{len(results)} passed the {size}px gate",
+        "summary": f"{passed}/{len(results)} passed the {canvas} gate",
         "note": "Gates check canvas/palette/alpha/margin/contrast, NOT whether "
         "the art looks good. Look at the images before reporting done.",
     }

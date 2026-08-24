@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "artgate-gen"
-version = "0.1.1"
+version = "0.2.0"
 description = "SDXL + pixel-art LoRA icon generation with deterministic art gates, as an MCP server"
 readme = "README.md"
 license = { text = "MIT" }

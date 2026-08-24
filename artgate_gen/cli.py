@@ -11,9 +11,32 @@ import importlib
 from pathlib import Path
 
 from artgate_gen.console import emit
-from artgate_gen.finish import finish
 from artgate_gen.profiling import RunProfile
 from artgate_gen.targets import TARGETS
+
+# Shown in `--size`'s error message on a malformed value.
+SIZE_METAVAR = "SIZE|WxH"
+
+
+def _parse_size(raw: str) -> tuple[int, int]:
+    """Parse ``--size``: a bare edge length or an explicit ``WxH``.
+
+    Args:
+        raw: ``"64"`` or ``"256x64"``.
+
+    Returns:
+        ``(width, height)``.
+
+    Raises:
+        ValueError: If ``raw`` matches neither form. argparse turns this into
+            a usage error rather than a traceback.
+    """
+    if "x" in raw:
+        width_str, _, height_str = raw.partition("x")
+        return (int(width_str), int(height_str))
+    edge = int(raw)
+    return (edge, edge)
+
 
 # Shown by `--help`. Kept as its own constant rather than reusing the module
 # docstring: the docstring explains the module to a reader of the source, while
@@ -75,7 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="'name=prompt' pairs, e.g. lantern='a brass lantern with a lit wick'",
     )
-    parser.add_argument("--size", type=int, default=64, help="icon size (default 64)")
+    parser.add_argument(
+        "--size",
+        type=_parse_size,
+        default=(64, 64),
+        metavar=SIZE_METAVAR,
+        help="icon size: an edge length (default 64) or WxH, e.g. 256x64",
+    )
     parser.add_argument("--colours", type=int, default=None, help="palette cap")
     parser.add_argument(
         "--candidates",
@@ -116,11 +145,9 @@ def main() -> None:
     if args.keep_raw:
         raw_dir.mkdir(parents=True, exist_ok=True)
 
-    # The CLI is square-only; widening `--size` to a non-square target is a
-    # separate change to this module's published argument surface. An unknown
-    # size fails here with a usage error rather than a KeyError, and rather
-    # than rendering art no spec can gate.
-    target = TARGETS.get((args.size, args.size))
+    # An unknown size fails here with a usage error rather than a KeyError,
+    # and rather than rendering art no spec can gate.
+    target = TARGETS.get(args.size)
     if target is None:
         parser.error(f"no target for size {args.size}")
 
@@ -138,7 +165,8 @@ def main() -> None:
                 if args.keep_raw:
                     image.save(raw_dir / f"{name}{suffix}.png")
                 with profile.phase(f"finish:{name}{suffix}"):
-                    finished = finish(image, args.size, args.colours)
+                    colours = args.colours or target.max_colors
+                    finished = target.finisher(image, args.size, colours)
                 out_path = (args.out / f"{name}{suffix}.png").resolve()
                 finished.save(out_path)
                 # Absolute file:// URL so the terminal makes it clickable and

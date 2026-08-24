@@ -14,31 +14,28 @@ from PIL import Image
 
 from artgate_gen.gate.cli import evaluate
 from artgate_gen.gate.spec import load_spec
-
-# Icon edge length to the style spec that governs it.
-SPECS = {
-    32: "pixel_icon.toml",
-    64: "pixel_icon_64.toml",
-}
+from artgate_gen.targets import TARGETS
 
 STYLES_DIR = Path(__file__).resolve().parent / "styles"
 
 
-def gate(path: Path, size: int) -> dict[str, Any]:
+def gate(path: Path, size: int | tuple[int, int]) -> dict[str, Any]:
     """Run the deterministic gate against one icon.
 
     Args:
         path: Path to the PNG to check.
-        size: Icon edge length, selecting the spec.
+        size: Icon edge length (square), or an explicit ``(width, height)``,
+            selecting the spec via ``TARGETS``.
 
     Returns:
         Whether the gate ran, whether it passed, and any failure codes.
 
     """
-    spec_name = SPECS.get(size)
-    if spec_name is None:
-        return {"gated": False, "reason": f"no spec for size {size}"}
-    spec = load_spec(STYLES_DIR / spec_name)
+    canvas = (size, size) if isinstance(size, int) else size
+    target = TARGETS.get(canvas)
+    if target is None:
+        return {"gated": False, "reason": f"no spec for size {canvas}"}
+    spec = load_spec(STYLES_DIR / target.spec)
     rgba = np.asarray(Image.open(path).convert("RGBA"), dtype=np.uint8)
     codes = evaluate(rgba, spec)
     return {

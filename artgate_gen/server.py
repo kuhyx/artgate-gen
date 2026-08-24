@@ -48,10 +48,11 @@ generate_icons = mcp.tool()(_generate_icons)
 def gate_icon(
     path: Annotated[str, Field(description="Path to a PNG to check.")],
     size: Annotated[
-        int,
+        int | list[int],
         Field(
             description=(
-                "Which spec to check against: 64 or 32. Any other value "
+                "Which spec to check against: 64 or 32, or [width, height] "
+                "for a non-square target such as [256, 64]. Any other value "
                 "returns gated=false rather than a verdict."
             ),
         ),
@@ -63,13 +64,15 @@ def gate_icon(
 
     Args:
         path: Path to a PNG.
-        size: Which spec to check against -- 64 or 32.
+        size: Which spec to check against -- 64 or 32, or ``[width, height]``
+            for a non-square target such as ``[256, 64]``.
 
     Returns:
         Whether it passed, and any failure codes.
 
     """
-    return gate(Path(path), size)
+    canvas = size if isinstance(size, int) else (size[0], size[1])
+    return gate(Path(path), canvas)
 
 
 @mcp.tool()

@@ -109,6 +109,17 @@ def test_gate_icon_rejects_an_unknown_size(tmp_path: Path) -> None:
     check(condition="no spec" in result["reason"], message="the reason is given")
 
 
+def test_gate_icon_accepts_an_explicit_width_height(tmp_path: Path) -> None:
+    """`[width, height]` selects the same spec as the equivalent square int."""
+    by_int = server.gate_icon(str(_icon(tmp_path)), EDGE_32)
+    by_list = server.gate_icon(str(_icon(tmp_path)), [EDGE_32, EDGE_32])
+    check_equal(
+        actual=by_list["codes"],
+        expected=by_int["codes"],
+        message="the list and int forms agree",
+    )
+
+
 def test_describe_icon_measures_without_a_model(tmp_path: Path) -> None:
     """Describing an icon needs no GPU and no pipeline."""
     result = server.describe_icon(str(_icon(tmp_path)))
@@ -169,6 +180,23 @@ def test_generate_icons_rejects_an_unsupported_size(tmp_path: Path) -> None:
         condition="no target for size" in result["summary"],
         message="the summary explains the refusal",
     )
+
+
+def test_generate_icons_accepts_an_explicit_width_height(tmp_path: Path) -> None:
+    """`size=[256, 64]` renders the backdrop target, not a square icon."""
+    result = server.generate_icons(
+        str(tmp_path),
+        {"dunes": "a desert dune line"},
+        size=[256, 64],
+    )
+    check_length(sized=result["icons"], expected=1, message="one strip was produced")
+    with Image.open(tmp_path / "dunes.png") as strip:
+        check_equal(
+            actual=strip.size,
+            expected=(256, 64),
+            message="the finished backdrop's canvas size",
+        )
+    generation.state.pipe = None
 
 
 def test_generate_icons_keeps_raw_renders(tmp_path: Path) -> None:

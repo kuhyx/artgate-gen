@@ -23,7 +23,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image
 
-from artgate_gen.gate.finish_ops import finish
+from artgate_gen.gate.codes import Code
+from artgate_gen.gate.finish_ops import downscale_to, quantize
+from artgate_gen.gate.finish_ops import finish as finish_square
 from artgate_gen.gate.spec import load_spec
 
 if TYPE_CHECKING:
@@ -117,14 +119,32 @@ def repair(path: Path, spec_path: Path, codes: list[str]) -> bool:
     # unclosed handle leaked a file descriptor per repair.
     with Image.open(path) as image:
         source = image.convert("RGBA")
-        size = spec.canvas[0] if spec.canvas else image.width
+        canvas = spec.canvas or (image.width, image.width)
     rgba = np.asarray(source, dtype=np.uint8)
+    width, _height = canvas
 
-    if "MARGIN_TOO_SMALL" in codes or "CANVAS_SIZE" in codes:
-        rgba = inset_subject(rgba, size, spec.min_margin)
+    # Only when the spec DECLARES MARGIN_TOO_SMALL, not merely when the icon
+    # failed it: a backdrop never declares this gate (a full-bleed strip has
+    # no margin to clear), so this guard is what stops a backdrop entering
+    # CANVAS_SIZE repair from being rebuilt as a square by inset_subject --
+    # width != height, so inset_subject's square canvas would be wrong anyway.
+    if ("MARGIN_TOO_SMALL" in codes or "CANVAS_SIZE" in codes) and spec.runs(
+        Code.MARGIN_TOO_SMALL
+    ):
+        rgba = inset_subject(rgba, width, spec.min_margin)
 
-    # Re-run the canonical chain rather than a hand-rolled subset, so alpha,
-    # palette and canvas all land in a consistent state at once.
-    fixed = finish(rgba, size, spec.max_colors or 32)
+    # Square vs non-square, not TARGETS membership: repair operates on an
+    # already-finished image, never an oversized render, so finish_backdrop's
+    # wrap-blend is the wrong tool here -- it demands overlap width beyond the
+    # canvas, which a correctly-sized strip never has, and crashes. A strip
+    # never declares SEAM_ENERGY as repairable, so there is no seam to redo;
+    # only quantise, resize, and force full opacity, matching what
+    # finish_backdrop guarantees without re-blending.
+    if canvas[0] == canvas[1]:
+        fixed = finish_square(rgba, width, spec.max_colors or 32)
+    else:
+        reduced = quantize(downscale_to(rgba, canvas), spec.max_colors or 32)
+        reduced[:, :, 3] = 255
+        fixed = reduced
     Image.fromarray(fixed, "RGBA").save(path)
     return True

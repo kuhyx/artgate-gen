@@ -10,7 +10,7 @@ invalidates every accepted result, and a test that only checked "contains
 from __future__ import annotations
 
 from artgate_gen import pipeline
-from artgate_gen.finish import finish_backdrop, finish_icon
+from artgate_gen.finish import MAX_COLOURS, finish_backdrop, finish_icon
 from artgate_gen.targets import (
     BACKDROP_NEGATIVE,
     BACKDROP_STYLE,
@@ -121,3 +121,20 @@ def test_every_target_is_keyed_by_its_own_canvas() -> None:
     """A row cannot claim a canvas that disagrees with its key."""
     for key, target in TARGETS.items():
         check_equal(actual=target.canvas, expected=key, message=f"{key} canvas")
+
+
+def test_icon_targets_match_the_square_finisher_default() -> None:
+    """A square target's own cap must equal `finish()`'s implicit default.
+
+    `generate_icons` and the CLI both call `target.finisher(..., target.max_colors)`
+    rather than `finish()`'s `colours or MAX_COLOURS` default. Passing an
+    existing square size must hit the identical palette cap it did before that
+    change, which this locks down rather than leaving it a coincidence of two
+    separately-edited constants.
+    """
+    for key in ((32, 32), (64, 64)):
+        check_equal(
+            actual=TARGETS[key].max_colors,
+            expected=MAX_COLOURS,
+            message=f"{key}'s max_colors matches finish()'s MAX_COLOURS",
+        )
