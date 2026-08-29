@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.x"
           cache: pip
 
       # Pinned ruff, not `pip install ruff`. An unpinned install once put CI on
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.x"
 
       # A tag that disagrees with pyproject.toml ships artifacts whose
       # filenames contradict the release they are attached to -- v0.1.1 built
