@@ -6,7 +6,7 @@
 # a lantern's glass panes all mush at 32px and read clearly at 64px.
 #
 # CALIBRATION. `max_colors` is deliberately NOT raised from pixel_icon's 32.
-# Measured over the 300 genuine 48x48 icons in ~/opengameart-downloads -- the
+# Measured over the 300 genuine 48x48 icons in ~/data/opengameart-downloads -- the
 # largest real-art sample available locally above 32px:
 #     p50=9  p75=11  p90=13  p95=13  p99=14  max=14
 # Rejection rate of that real art: cap 32 -> 0.00%, and every larger cap also

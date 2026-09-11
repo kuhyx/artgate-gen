@@ -2,7 +2,7 @@
 # "AI slop" is most detectable.
 #
 # CALIBRATION (measured, not guessed) over 250 genuine 32x32 CC0 icons from
-# ~/opengameart-downloads:
+# ~/data/opengameart-downloads:
 #     p50=7  p75=10  p90=13  p95=14  p99=26  max=30
 # Rejection rate of real hand-made art by cap:
 #     cap 16 -> 3.6%   cap 24 -> 1.2%   cap 32 -> 0.0%

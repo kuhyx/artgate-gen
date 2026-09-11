@@ -72,7 +72,7 @@ a different metric.
 **Record prompt + seed for everything, including experiments.** A PNG whose
 recipe is lost cannot be varied, fixed or regenerated. In this session a raw
 render was overwritten and the exact image behind a reported number became
-unrecoverable. `~/roadside-assistance/tools/artgen.py` is a manifest
+unrecoverable. `~/src/roadside-assistance/tools/artgen.py` is a manifest
 implementation whose recipes are verified to reproduce images bit-for-bit.
 
 ## SEAM_ENERGY vertical axis (2026-08-18)
