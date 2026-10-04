@@ -13,7 +13,13 @@ from __future__ import annotations
 import contextlib
 import time
 
-from huggingface_hub import disable_progress_bars, snapshot_download
+from huggingface_hub import snapshot_download
+
+# Imported from its defining submodule, not `huggingface_hub.utils` (the
+# library's own documented path): `huggingface_hub.utils` re-exports it
+# without an explicit `__all__`, which mypy --strict rejects as an implicit
+# re-export.
+from huggingface_hub.utils.tqdm import disable_progress_bars
 
 from artgate_gen.console import emit
 from artgate_gen.pipeline import LORA, MODEL, VAE

@@ -1,0 +1,42 @@
+# Character portrait at 256x256: identity-only, not an expression carrier.
+#
+# WHY THIS EXISTS. Session 1e closed diffusion expression generation --
+# expressions are drawn Kerfus-style screen-face glyphs, not portrait renders
+# (see roadside-assistance/docs/art-findings.md). What remains for the
+# portrait is identity and pose: a single accepted recipe (art/MANIFEST.json,
+# seed 11) rendered at three-quarter view, closed-mouth, head-and-shoulders.
+#
+# RENDER PATH. Rendered at 1024x1024, downscaled straight to 256x256 -- no
+# wrap-blend (a portrait never tiles) and no strip_background (it is
+# full-bleed like a backdrop: sometimes a brick wall or jacket fills the
+# frame right to the edge, and that flood measured destroying 47% of a
+# synthetic full-bleed sky). The finisher is `finish_portrait`.
+#
+# CALIBRATION. `max_colors` is left OUT on purpose. The accepted portraits in
+# art/MANIFEST.json shipped at `max_colors: 0` -- unquantised -- because
+# quantising now would move pixels in art that already survived five
+# sessions and ~250 renders of identity/consistency work. Do not add a cap
+# here without a user decision made against a real quantised render, per the
+# standing "never a silent change" rule other specs in this file state.
+#
+# There is no `min_margin` and no `alpha_binary`, for the same reason
+# backdrop_strip.toml has neither: both describe a subject surrounded by
+# transparency, and a full-bleed portrait has none.
+name = "portrait"
+canvas = [256, 256]
+
+# Only two gates, both trivial-to-implement but genuinely checking something:
+#   CANVAS_SIZE             trivial -- guaranteed by the finisher.
+#   FULLY_OPAQUE_REQUIRED   near-trivial in the same sense as the backdrop
+#                          spec's copy: it makes the strip_background bypass
+#                          verifiable rather than trusted, not a judgement on
+#                          whether the portrait looks right. TOO_MANY_COLORS
+#                          is deliberately NOT declared -- there is no cap to
+#                          check against, and declaring it against an
+#                          unbounded palette would pass vacuously, which is
+#                          exactly the fail-open pattern this project's other
+#                          specs warn against reproducing.
+gates = [
+  "CANVAS_SIZE",
+  "FULLY_OPAQUE_REQUIRED",
+]

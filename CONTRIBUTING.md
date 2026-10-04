@@ -8,7 +8,7 @@ venv/bin/pip install -e ".[dev]"
 pre-commit install && pre-commit install --hook-type pre-push
 ```
 
-[docs/development.md](docs/development.md) has the full picture. The short
+[docs/DOCS-development.md](docs/DOCS-development.md) has the full picture. The short
 version is three rules that are enforced, not suggested:
 
 1. **No file over 250 lines** — any tracked text file, no exemptions.

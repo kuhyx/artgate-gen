@@ -9,6 +9,10 @@ torch==2.11.0+cu128
 torchvision==0.26.0+cu128
 diffusers==0.39.0
 transformers==5.15.0
+# Pinned rather than left transitive: fetch.py's import path (huggingface_hub
+# 1.27.0 dropped disable_progress_bars from the top-level package) already
+# drifted once via diffusers/transformers' unpinned dependency range.
+huggingface_hub==1.27.0
 accelerate==1.14.0
 peft==0.20.0
 safetensors==0.8.0

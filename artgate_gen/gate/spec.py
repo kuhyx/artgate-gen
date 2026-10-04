@@ -4,6 +4,9 @@ Gate applicability is *data*, not an if-chain. Palette conformance and
 scale-invariance are meaningless for hand-painted work, so running them there
 would manufacture false failures; a per-style spec makes that a one-line
 declaration instead of branching logic scattered through the gates.
+
+Per-field TOML parsing lives in `spec_fields.py`, split out to keep this file
+under the 250-line cap.
 """
 
 from __future__ import annotations
@@ -12,24 +15,19 @@ import tomllib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from artgate_gen.gate.codes import DECLARABLE, RESULT_ONLY, Code
+from artgate_gen.gate.codes import Code
+from artgate_gen.gate.spec_error import SpecError
+from artgate_gen.gate.spec_fields import (
+    parse_canvas,
+    parse_gates,
+    parse_palette,
+    parse_seam_axes,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-# A canvas is declared as exactly [width, height].
-_CANVAS_DIMS = 2
-
-# Length of a '#rrggbb' colour literal.
-_HEX_RGB_LEN = 7
-
-
-class SpecError(ValueError):
-    """Raised when a spec file is missing, malformed, or self-contradictory.
-
-    Distinct from a gate failure: this maps to the harness-error exit code,
-    never to an art verdict.
-    """
+__all__ = ["SpecError", "TargetSpec", "load_spec"]
 
 
 @dataclass(frozen=True)
@@ -45,6 +43,10 @@ class TargetSpec:
         scale: Declared integer upscale factor, or ``None`` to auto-detect.
         min_margin: Required transparent border in pixels.
         gates: The applicable gate codes; anything absent is not run.
+        seam_axes: Which axes SEAM_ENERGY checks, when declared. Defaults to
+            both -- a spec for anything that tiles on only one axis (e.g.
+            `backdrop_strip`, which never tiles top-to-bottom) opts out of
+            the other explicitly rather than silently failing on it.
     """
 
     name: str
@@ -55,6 +57,7 @@ class TargetSpec:
     scale: int | None = None
     min_margin: int = 0
     gates: frozenset[Code] = field(default_factory=frozenset)
+    seam_axes: tuple[str, ...] = ("horizontal", "vertical")
 
     def runs(self, code: Code) -> bool:
         """Report whether a gate applies to this style.
@@ -66,103 +69,6 @@ class TargetSpec:
             True if the gate should be evaluated for this spec.
         """
         return code in self.gates
-
-
-def _parse_palette(raw: object) -> frozenset[tuple[int, int, int]]:
-    """Parse a list of ``#rrggbb`` strings into RGB triples.
-
-    Args:
-        raw: The ``palette`` value from a spec file.
-
-    Returns:
-        The parsed colours, empty if unset.
-
-    Raises:
-        SpecError: If an entry is not a ``#rrggbb`` hex string.
-    """
-    if raw is None:
-        return frozenset()
-    if not isinstance(raw, list):
-        msg = "palette must be a list of '#rrggbb' strings"
-        raise SpecError(msg)
-    out: set[tuple[int, int, int]] = set()
-    for entry in raw:
-        malformed = (
-            not isinstance(entry, str)
-            or not entry.startswith("#")
-            or len(entry) != _HEX_RGB_LEN
-        )
-        if malformed:
-            msg = f"bad palette entry {entry!r}: expected '#rrggbb'"
-            raise SpecError(msg)
-        try:
-            value = int(entry[1:], 16)
-        except ValueError as exc:
-            msg = f"bad palette entry {entry!r}: not hexadecimal"
-            raise SpecError(msg) from exc
-        out.add(((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF))
-    return frozenset(out)
-
-
-def _parse_gates(raw: object) -> frozenset[Code]:
-    """Parse the list of applicable gate names.
-
-    Args:
-        raw: The ``gates`` value from a spec file.
-
-    Returns:
-        The applicable gate codes.
-
-    Raises:
-        SpecError: If ``gates`` is missing, empty, or names an unknown gate.
-    """
-    if not isinstance(raw, list) or not raw:
-        msg = "spec must list at least one gate under 'gates'"
-        raise SpecError(msg)
-    known = {c.value for c in Code}
-    unknown = [g for g in raw if g not in known]
-    if unknown:
-        msg = f"unknown gate(s): {sorted(map(str, unknown))}"
-        raise SpecError(msg)
-    codes = frozenset(Code(g) for g in raw)
-
-    result_only = codes & RESULT_ONLY
-    if result_only:
-        names = sorted(str(c) for c in result_only)
-        msg = f"{names} are emitted by gates, not declarable in 'gates'"
-        raise SpecError(msg)
-
-    unimplemented = codes - DECLARABLE
-    if unimplemented:
-        names = sorted(str(c) for c in unimplemented)
-        msg = f"gate(s) {names} are declared but not implemented"
-        raise SpecError(msg)
-    return codes
-
-
-def _parse_canvas(raw: object) -> tuple[int, int] | None:
-    """Parse the required canvas size.
-
-    Args:
-        raw: The ``canvas`` value from a spec file.
-
-    Returns:
-        The ``(width, height)`` pair, or None if unset.
-
-    Raises:
-        SpecError: If present but not a pair of positive integers.
-    """
-    if raw is None:
-        return None
-    if not isinstance(raw, list) or len(raw) != _CANVAS_DIMS:
-        msg = "canvas must be [width, height] positive integers"
-        raise SpecError(msg)
-    width, height = raw
-    valid = all(isinstance(v, int) and v > 0 for v in (width, height))
-    if not valid:
-        msg = "canvas must be [width, height] positive integers"
-        raise SpecError(msg)
-    return (int(width), int(height))
 
 
 def load_spec(path: Path) -> TargetSpec:
@@ -193,13 +99,14 @@ def load_spec(path: Path) -> TargetSpec:
 
     spec = TargetSpec(
         name=name,
-        canvas=_parse_canvas(data.get("canvas")),
-        palette=_parse_palette(data.get("palette")),
+        canvas=parse_canvas(data.get("canvas")),
+        palette=parse_palette(data.get("palette")),
         max_colors=data.get("max_colors"),
         alpha_binary=bool(data.get("alpha_binary", False)),
         scale=data.get("scale"),
         min_margin=int(data.get("min_margin", 0)),
-        gates=_parse_gates(data.get("gates")),
+        gates=parse_gates(data.get("gates")),
+        seam_axes=parse_seam_axes(data.get("seam_axes")),
     )
     _require_config(spec)
     return spec

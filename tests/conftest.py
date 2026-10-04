@@ -34,6 +34,10 @@ STUBBED = (
     "diffusers.utils",
     "transformers",
     "huggingface_hub",
+    # Real submodule paths, because fetch.py does
+    # `from huggingface_hub.utils.tqdm import disable_progress_bars`.
+    "huggingface_hub.utils",
+    "huggingface_hub.utils.tqdm",
 )
 
 

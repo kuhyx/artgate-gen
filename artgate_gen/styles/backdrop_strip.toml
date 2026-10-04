@@ -39,8 +39,9 @@ max_colors = 32
 #                          edge band and a bright interior, so it does not
 #                          fire on legitimate night-sky art.
 #   NO_VERTICAL_STRUCTURE  genuinely failable -- catches a flat wash.
-#   SEAM_ENERGY            genuinely failable if wrap-blend regresses;
-#                          checked on both axes at threshold 4.0. Absent
+#   SEAM_ENERGY            genuinely failable if the horizontal wrap
+#                          regresses; checked on the horizontal axis only
+#                          (see `seam_axes` below) at threshold 4.0. Absent
 #                          on purpose: SCALE_NOT_INVARIANT. detect_scale
 #                          returns 1 on a finished strip (it is native
 #                          resolution, not an integer upscale), so
@@ -55,3 +56,17 @@ gates = [
   "NO_VERTICAL_STRUCTURE",
   "SEAM_ENERGY",
 ]
+
+# CORRECTION, measured against roadside-assistance's shipped art. SEAM_ENERGY
+# checked both axes here until this was measured: 13 of the 15 accepted,
+# human-approved backdrops/*.png strips (never previously run through this
+# gate) score a VERTICAL wrap_discontinuity ratio above 4.0 -- up to 12.6.
+# A backdrop strip never tiles top-to-bottom; only three horizontal copies
+# are ever live on screen at once. The vertical check was inherited from
+# `check_seam_energy`'s general square-tile heritage (ported from
+# `tiletool.py`, which does check both axes correctly for an asset that
+# tiles both ways) without re-deriving whether it applied to THIS target's
+# actual usage. It didn't: a sky-brighter-than-ground strip legitimately
+# differs between row 0 and row -1, and that is not a seam. Scoped to the
+# one axis this asset actually wraps on.
+seam_axes = ["horizontal"]

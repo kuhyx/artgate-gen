@@ -44,10 +44,6 @@ def snapshot_download(repo_id: str, **kwargs: object) -> str:
     return f"/stub/cache/{repo_id}"
 
 
-def disable_progress_bars() -> None:
-    """Silence progress bars; a no-op here."""
-
-
 def reset() -> None:
     """Clear recorded state between tests."""
     missing.clear()

@@ -101,7 +101,7 @@ def evaluate(rgba: np.ndarray, spec: TargetSpec) -> list[Code]:
         (Code.FULLY_OPAQUE_REQUIRED, lambda: check_fully_opaque(rgba)),
         (Code.LETTERBOX_BARS, lambda: check_letterbox(rgba)),
         (Code.NO_VERTICAL_STRUCTURE, lambda: check_vertical_structure(rgba)),
-        (Code.SEAM_ENERGY, lambda: check_seam_energy(rgba)),
+        (Code.SEAM_ENERGY, lambda: check_seam_energy(rgba, spec.seam_axes)),
     ]
 
     failures: list[Code] = []

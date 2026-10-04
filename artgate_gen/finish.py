@@ -15,6 +15,15 @@ measured, opaque fraction 1.000 -> 0.531 on a synthetic gradient sky, because
 the flood starts from the border ring and the sky is within tolerance of the
 border median. The strip instead gets a wrap-blend, which is what lets three
 instances tile horizontally without a seam.
+
+``finish_portrait`` is the third: also full-bleed (a head-and-shoulders
+portrait fills the frame, sometimes with a background element like a brick
+wall), so it shares the backdrop's ``strip_background`` bypass, but there is
+no horizontal tiling requirement, so no wrap-blend either -- a straight
+downscale. It also skips quantisation by default: the accepted portraits in
+``art/MANIFEST.json`` were shipped at ``max_colors: 0`` (unquantised), and
+introducing a cap now would change pixels in art that already survived five
+sessions of identity/consistency work to get right.
 """
 
 from __future__ import annotations
@@ -134,6 +143,37 @@ def finish_backdrop(
         )
         raise ValueError(msg)
     reduced = quantize(downscale_to(wrap_blend(arr, overlap), canvas), colours)
+    opaque = reduced.copy()
+    opaque[:, :, 3] = 255
+    return Image.fromarray(opaque, "RGBA")
+
+
+def finish_portrait(
+    raw: Image.Image, canvas: tuple[int, int], colours: int = 0
+) -> Image.Image:
+    """Downscale a full-bleed portrait render, keeping every pixel opaque.
+
+    Neither ``strip_background`` nor ``binarize_alpha`` runs here, for the same
+    reason as ``finish_backdrop``: a head-and-shoulders portrait is full-bleed,
+    and the flood measured destroying 47% of a synthetic sky would do the same
+    to a portrait's background. Unlike a backdrop there is no wrap-blend step --
+    a portrait never tiles.
+
+    Args:
+        raw: The full-resolution render.
+        canvas: Target ``(width, height)`` in pixels.
+        colours: Palette cap. ``0`` (the default) skips quantisation entirely,
+            matching the accepted portraits' ``max_colors: 0`` -- they were
+            never quantised, and capping them now would move pixels in art
+            that already passed manual review.
+
+    Returns:
+        The finished portrait, opaque by construction.
+    """
+    arr: NDArray[np.uint8] = np.asarray(raw.convert("RGBA"), dtype=np.uint8)
+    reduced = downscale_to(arr, canvas)
+    if colours:
+        reduced = quantize(reduced, colours)
     opaque = reduced.copy()
     opaque[:, :, 3] = 255
     return Image.fromarray(opaque, "RGBA")

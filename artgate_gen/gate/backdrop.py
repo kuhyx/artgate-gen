@@ -183,22 +183,41 @@ def wrap_discontinuity(rgba: NDArray[np.uint8]) -> tuple[float, float]:
     return horizontal, vertical
 
 
-def check_seam_energy(rgba: NDArray[np.uint8]) -> list[Code]:
-    """Verify a strip tiles without a visible seam on either axis.
+def check_seam_energy(
+    rgba: NDArray[np.uint8], axes: tuple[str, ...] = ("horizontal", "vertical")
+) -> list[Code]:
+    """Verify a strip tiles without a visible seam on its declared axes.
 
     A parallax strip tiles horizontally on screen (three instances are live
-    at once), so a discontinuous wrap shows as a seam on every frame. The
-    vertical axis is checked too even though the strip never tiles
-    vertically: a large vertical discontinuity is still evaluated against the
-    same threshold, by design.
+    at once), so a discontinuous horizontal wrap shows as a seam on every
+    frame -- that axis is always worth checking for anything that tiles that
+    way. The vertical axis only matters for an asset that also tiles
+    vertically (e.g. a general square texture tile); a `backdrop_strip`
+    asset never does, so its spec passes ``axes=("horizontal",)``.
+
+    CORRECTION (measured against this project's own accepted art): checking
+    the vertical axis unconditionally on `backdrop_strip` output was wrong.
+    13 of the 15 shipped, human-approved 256x64 strips in
+    ``roadside-assistance/art/backdrops`` -- never run through this gate --
+    measure a vertical wrap_discontinuity ratio above `SEAM_ENERGY_MAX`
+    (up to 12.6), simply because a sky-to-ground strip's top row and bottom
+    row are legitimately different. That is not a seam; nothing about a
+    256x64 side-scrolling strip ever wraps top-to-bottom. Declaring the
+    vertical axis for this target would have rejected art already shipped.
 
     Args:
         rgba: An ``(h, w, 4)`` uint8 array.
+        axes: Which axes to check, any of ``"horizontal"``/``"vertical"``.
+            Defaults to both, preserving this function's prior behaviour for
+            any spec that does not opt out.
 
     Returns:
-        ``[SEAM_ENERGY]`` if either axis's ratio exceeds ``SEAM_ENERGY_MAX``.
+        ``[SEAM_ENERGY]`` if a declared axis's ratio exceeds
+        ``SEAM_ENERGY_MAX``.
     """
     horizontal, vertical = wrap_discontinuity(rgba)
-    if horizontal > SEAM_ENERGY_MAX or vertical > SEAM_ENERGY_MAX:
+    over_h = "horizontal" in axes and horizontal > SEAM_ENERGY_MAX
+    over_v = "vertical" in axes and vertical > SEAM_ENERGY_MAX
+    if over_h or over_v:
         return [Code.SEAM_ENERGY]
     return []

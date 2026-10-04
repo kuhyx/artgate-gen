@@ -232,3 +232,7 @@ def test_backdrop_keeps_the_whole_image() -> None:
         expected=1.0,
         message="the opaque fraction of a finished strip",
     )
+
+
+# Portrait finisher tests live in test_finish_portrait.py -- kept separate so
+# this file stays under the 250-line cap.

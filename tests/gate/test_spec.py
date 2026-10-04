@@ -105,6 +105,25 @@ class TestValidSpec:
             message="not TargetSpec(name='bare').runs(Code.OFF_PALETTE)",
         )
 
+    def test_seam_axes_defaults_to_both(self, tmp_path: Path) -> None:
+        """A spec that never mentions seam_axes checks both, unchanged."""
+        spec = load_spec(_write(tmp_path, VALID))
+        check_equal(
+            actual=spec.seam_axes,
+            expected=("horizontal", "vertical"),
+            message="spec.seam_axes == ('horizontal', 'vertical')",
+        )
+
+    def test_seam_axes_can_be_scoped(self, tmp_path: Path) -> None:
+        """A spec may declare only the axis it actually tiles on."""
+        body = 'name = "m"\ngates = ["SEAM_ENERGY"]\nseam_axes = ["horizontal"]\n'
+        spec = load_spec(_write(tmp_path, body))
+        check_equal(
+            actual=spec.seam_axes,
+            expected=("horizontal",),
+            message="spec.seam_axes == ('horizontal',)",
+        )
+
 
 class TestMalformedSpec:
     """Every malformed input raises SpecError, never a permissive spec."""
@@ -154,6 +173,20 @@ class TestMalformedSpec:
         """Canvas must be a pair of positive integers."""
         body = f'name = "m"\ngates = ["CANVAS_SIZE"]\n{canvas}\n'
         with pytest.raises(SpecError, match="canvas must be"):
+            load_spec(_write(tmp_path, body))
+
+    @pytest.mark.parametrize(
+        "seam_axes",
+        [
+            "seam_axes = []",
+            'seam_axes = "horizontal"',
+            'seam_axes = ["diagonal"]',
+        ],
+    )
+    def test_bad_seam_axes(self, tmp_path: Path, seam_axes: str) -> None:
+        """seam_axes must be a non-empty list of horizontal/vertical."""
+        body = f'name = "m"\ngates = ["SEAM_ENERGY"]\n{seam_axes}\n'
+        with pytest.raises(SpecError, match="seam_axes"):
             load_spec(_write(tmp_path, body))
 
 

@@ -154,3 +154,33 @@ class TestSeamEnergy:
             expected=[Code.SEAM_ENERGY],
             message=f"a hard step on the {axis} wrap edge must fail",
         )
+
+    def test_scoped_to_horizontal_ignores_vertical_step(self) -> None:
+        """An asset declaring only the horizontal axis is blind to a vertical seam.
+
+        Regression for `backdrop_strip`: a 256x64 strip never tiles top-to-
+        bottom, so a target whose spec passes `axes=("horizontal",)` must not
+        fail on a hard top/bottom split -- that split is not a defect for an
+        asset that only ever repeats left-to-right.
+        """
+        arr = np.zeros((64, 64, 4), dtype=np.uint8)
+        arr[:, :, :3] = 100
+        arr[0, :, :3] = BOUNDARY_STEP_LUMA
+        arr[:, :, 3] = 255
+        check_equal(
+            actual=check_seam_energy(arr, axes=("horizontal",)),
+            expected=[],
+            message="check_seam_energy(arr, axes=('horizontal',)) == []",
+        )
+
+    def test_scoped_to_horizontal_still_catches_horizontal_step(self) -> None:
+        """Scoping to one axis does not silently disable that axis's own check."""
+        arr = np.zeros((64, 64, 4), dtype=np.uint8)
+        arr[:, :, :3] = 100
+        arr[:, 0, :3] = BOUNDARY_STEP_LUMA
+        arr[:, :, 3] = 255
+        check_equal(
+            actual=check_seam_energy(arr, axes=("horizontal",)),
+            expected=[Code.SEAM_ENERGY],
+            message="check_seam_energy(...) == [Code.SEAM_ENERGY]",
+        )

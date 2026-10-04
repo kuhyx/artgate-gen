@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from artgate_gen.finish import finish_backdrop, finish_icon
+from artgate_gen.finish import finish_backdrop, finish_icon, finish_portrait
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -52,6 +52,22 @@ BACKDROP_STYLE = "pixel art, side-scrolling parallax background, wide landscape,
 BACKDROP_NEGATIVE = (
     "photo, realistic, blurry, soft focus, text, watermark, hands, "
     "drop shadow, black bars, letterbox, border, frame"
+)
+
+# Verbatim from `art/MANIFEST.json`'s accepted `category: "portraits"` entries
+# (e.g. `neutral_s11`) in roadside-assistance -- the recipe that survived
+# session 1b/1c/1d/1e's identity-consistency work. Only the reusable stem and
+# negative live here; the subject-specific expression/pose clause is per-call,
+# same as ICON_STYLE and BACKDROP_STYLE.
+PORTRAIT_STYLE = (
+    "pixel art, close-up character portrait, head and shoulders, "
+    "three-quarter view, crisp"
+)
+PORTRAIT_NEGATIVE = (
+    "photo, realistic, blurry, text, watermark, multiple heads, deformed "
+    "face, shoulder strap, harness, backpack, hood, scarf, green jacket, "
+    "olive, khaki, army green, camouflage, teal, white jacket, white coat, "
+    "lab coat, full body, wide shot, standing, hands, distant"
 )
 
 
@@ -131,5 +147,18 @@ TARGETS: Final[dict[tuple[int, int], Target]] = {
         negative=BACKDROP_NEGATIVE,
         max_colors=32,
         finisher=finish_backdrop,
+    ),
+    # max_colors=0 means "skip quantisation", matching the accepted portraits'
+    # own `max_colors: 0` in art/MANIFEST.json -- see finish_portrait and
+    # portrait.toml for why introducing a cap now is a decision this project
+    # explicitly defers, not an oversight.
+    (256, 256): Target(
+        spec="portrait.toml",
+        render=(1024, 1024),
+        canvas=(256, 256),
+        style=PORTRAIT_STYLE,
+        negative=PORTRAIT_NEGATIVE,
+        max_colors=0,
+        finisher=finish_portrait,
     ),
 }

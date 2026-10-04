@@ -42,7 +42,7 @@ As an MCP server, with `.mcp.json`:
 ```
 
 Four tools: `generate_icons`, `gate_icon`, `describe_icon`, `model_status`.
-See [docs/tools.md](docs/tools.md).
+See [docs/DOCS-tools.md](docs/DOCS-tools.md).
 
 ## Two things worth knowing before you start
 
@@ -72,9 +72,9 @@ protected by the mask, not by a timid strength. See
 
 ## Documentation
 
-- [Usage](docs/usage.md) — CLI flags, MCP registration, model caching
-- [Tools](docs/tools.md) — the four MCP tools and their gate codes
-- [Development](docs/development.md) — the gate, the test suite, contributing
+- [Usage](docs/DOCS-usage.md) — CLI flags, MCP registration, model caching
+- [Tools](docs/DOCS-tools.md) — the four MCP tools and their gate codes
+- [Development](docs/DOCS-development.md) — the gate, the test suite, contributing
 
 ## Licence
 

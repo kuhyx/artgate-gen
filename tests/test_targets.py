@@ -10,17 +10,25 @@ invalidates every accepted result, and a test that only checked "contains
 from __future__ import annotations
 
 from artgate_gen import pipeline
-from artgate_gen.finish import MAX_COLOURS, finish_backdrop, finish_icon
+from artgate_gen.finish import (
+    MAX_COLOURS,
+    finish_backdrop,
+    finish_icon,
+    finish_portrait,
+)
 from artgate_gen.targets import (
     BACKDROP_NEGATIVE,
     BACKDROP_STYLE,
     ICON_NEGATIVE,
     ICON_STYLE,
+    PORTRAIT_NEGATIVE,
+    PORTRAIT_STYLE,
     TARGETS,
 )
 from tests.assertions import check, check_equal
 
 BACKDROP = (256, 64)
+PORTRAIT = (256, 256)
 
 
 def test_icon_style_is_verbatim() -> None:
@@ -121,6 +129,55 @@ def test_every_target_is_keyed_by_its_own_canvas() -> None:
     """A row cannot claim a canvas that disagrees with its key."""
     for key, target in TARGETS.items():
         check_equal(actual=target.canvas, expected=key, message=f"{key} canvas")
+
+
+def test_portrait_style_is_verbatim() -> None:
+    """The portrait stem matches the accepted `art/MANIFEST.json` recipe."""
+    check_equal(
+        actual=PORTRAIT_STYLE,
+        expected=(
+            "pixel art, close-up character portrait, head and shoulders, "
+            "three-quarter view, crisp"
+        ),
+        message="the portrait style stem",
+    )
+
+
+def test_portrait_negative_is_verbatim() -> None:
+    """The portrait negative matches the accepted `art/MANIFEST.json` recipe."""
+    check_equal(
+        actual=PORTRAIT_NEGATIVE,
+        expected=(
+            "photo, realistic, blurry, text, watermark, multiple heads, "
+            "deformed face, shoulder strap, harness, backpack, hood, scarf, "
+            "green jacket, olive, khaki, army green, camouflage, teal, white "
+            "jacket, white coat, lab coat, full body, wide shot, standing, "
+            "hands, distant"
+        ),
+        message="the portrait negative prompt",
+    )
+
+
+def test_portrait_target_uses_the_portrait_finisher() -> None:
+    """The portrait must not go through either icon or backdrop finishing."""
+    check(
+        condition=TARGETS[PORTRAIT].finisher is finish_portrait,
+        message="the portrait uses finish_portrait",
+    )
+
+
+def test_portrait_max_colors_is_zero() -> None:
+    """The portrait target skips quantisation by default.
+
+    Matches the accepted portraits' own `max_colors: 0` in
+    `art/MANIFEST.json` -- introducing a cap is a decision this project
+    explicitly defers, not an oversight.
+    """
+    check_equal(
+        actual=TARGETS[PORTRAIT].max_colors,
+        expected=0,
+        message="portrait max_colors",
+    )
 
 
 def test_icon_targets_match_the_square_finisher_default() -> None:

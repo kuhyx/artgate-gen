@@ -12,6 +12,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
+# So `-m artgate_gen...` resolves regardless of the caller's CWD.
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 readonly SCRIPT_NAME="${0##*/}"
 readonly VENV="$SCRIPT_DIR/venv"
 readonly PY="$VENV/bin/python"
@@ -102,10 +104,8 @@ install_deps() {
 }
 
 fetch_model() {
-    # fetch_model.py probes the cache first and prints its own one-line status,
-    # so there is deliberately no log line here -- an unconditional "Ensuring
-    # ..." banner is exactly the noise this step was asked to stop emitting.
-    "$PY" "$SCRIPT_DIR/fetch_model.py"
+    # fetch_cli prints its own one-line cache status, so no log line here.
+    "$PY" -m artgate_gen.fetch_cli
 }
 
 # Set by gate_one: the CLI's combined output and its exit status, for the
