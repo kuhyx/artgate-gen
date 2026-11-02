@@ -1,8 +1,6 @@
-# Evaluate long-context pixel-art backends (SD3.5-Large, Flux) against SDXL
+# Long-context pixel-art backends: background and research
 
-Work in `~/artgate-gen` (published quality: ruff `select = ["ALL"]`, mypy
-strict, 100% branch coverage, 250-line file cap, **no `noqa` and no
-`type: ignore` anywhere**) and `~/roadside-assistance` (the art + its manifest).
+Moved verbatim from prompts/TODO-longctx-backends.md (researched 2026-08-16). The remaining evaluation task lives in the todo app.
 
 ## WHY THIS EXISTS
 
@@ -83,61 +81,3 @@ Ask the user to run the login themselves — it is interactive:
 ```
 
 Do not attempt to work around a gate.
-
-## GOAL
-
-Answer one question with real images: **is a long-context backbone worth
-switching to for this project's pixel art?** The deliverable is a decision with
-evidence attached, not a migration.
-
-## APPROACH
-
-1. **Clear the gate.** Confirm a token exists and the terms are accepted for
-   whichever base you evaluate. If the user declines, stop and say so — the
-   rest is unreachable.
-2. **Start with `nerijs/pixel-art-3.5L`,** not Flux. It is the only candidate
-   claiming grid alignment, it shares an author with the current LoRA, and
-   SD3.5-Large is a smaller lift than a quantised Flux stack.
-3. **Render the same subjects as the SDXL set,** using the recipes in
-   `~/roadside-assistance/art/MANIFEST.json` — the seven portrait expressions
-   and a couple of backdrop strips. Same subjects, different backbone, is the
-   only comparison that means anything.
-4. **Use a genuinely long prompt** in at least one arm. The whole premise is
-   that more can be pinned; a 40-token prompt tests nothing.
-5. **Put every render in `~/roadside-assistance/art/`** under its own category
-   (e.g. `sd35-trial/`), each with a full manifest entry — including the
-   failures. Nothing lands in `/tmp`.
-6. **Build a labelled side-by-side contact sheet** (`tools/artgen.py:label_sheet`)
-   with the SDXL set and the candidate set on the same image, and **show the
-   user**. The decision is theirs and it is visual.
-
-## MUST
-
-- Record every render in `art/MANIFEST.json` before showing anything.
-- Report wall-clock seconds per image and peak VRAM for each backbone. "Slower"
-  is not a finding; "31 s vs 7 s, 12.9 GB vs 9.1 GB" is.
-- Keep pixel-art quality judgements **visual**. A consistency metric measures
-  agreement, not correctness — a set can be uniformly wrong and score well.
-  Check grid alignment by eye at 1:1, then zoomed.
-- If artgate-gen gains a second backbone, it must be **selectable, not
-  swapped**: SDXL stays the default and stays working. Run the full gate before
-  committing: `ruff check . && ruff format --check . && mypy --strict
-  artgate_gen tools tests generate.py mcp_server.py && pytest && python
-  tools/check_line_cap.py`.
-
-## MUST NOT
-
-- Do not delete or overwrite the SDXL portraits or backdrops.
-- Do not add a `noqa` or `type: ignore` to either repo.
-- Do not download a base model without the user's go-ahead — these are 15-25 GB.
-- Do not migrate the project on the strength of a single good render.
-
-## DONE
-
-A labelled side-by-side sheet in `~/roadside-assistance/art/contact-sheets/`,
-shown to the user, plus a short written verdict in
-`~/artgate-gen/docs/` covering: image quality (grid alignment especially),
-seconds per image, peak VRAM, licence, and a recommendation to switch or stay.
-"Stay on SDXL" is a perfectly good outcome if that is what the images say.
-
-REMOVE ME AFTER FINISH
