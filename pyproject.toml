@@ -118,10 +118,12 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
   "artgate_gen.pipeline",
+  "artgate_gen.sd35",
   "artgate_gen.profiling.run",
   # Exercises the same untyped library surface against the stubs.
   "tests.test_types",
   "tests.test_pipeline",
+  "tests.test_sd35",
 ]
 disallow_untyped_calls = false
 

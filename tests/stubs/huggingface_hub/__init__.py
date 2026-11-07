@@ -21,6 +21,48 @@ missing: set[str] = set()
 # Every repo id passed to `snapshot_download`, in call order.
 calls: list[str] = []
 
+# What `HfApi.list_repo_tree` reports: (path, size in bytes). A trimmed copy of
+# the real SD3.5-Large listing, keeping one file the fetch must skip.
+TREE = (
+    ("model_index.json", 706),
+    ("sd3.5_large.safetensors", 16_460_379_262),
+    ("transformer/diffusion_pytorch_model-00001-of-00002.safetensors", 9_985_185_992),
+    ("vae/diffusion_pytorch_model.safetensors", 167_666_902),
+)
+
+
+class RepoFile:
+    """One entry of a repository listing."""
+
+    def __init__(self, path: str, size: int) -> None:
+        """Store the listing fields this project reads.
+
+        Args:
+            path: Path inside the repository.
+            size: Size in bytes.
+
+        """
+        self.path = path
+        self.size = size
+
+
+class HfApi:
+    """Stands in for the Hub API client."""
+
+    def list_repo_tree(self, repo_id: str, **kwargs: object) -> list[RepoFile]:
+        """List the stub repository.
+
+        Args:
+            repo_id: Ignored; every repo lists as ``TREE``.
+            **kwargs: Ignored; accepts ``recursive``.
+
+        Returns:
+            One entry per file in ``TREE``.
+
+        """
+        del repo_id, kwargs
+        return [RepoFile(path, size) for path, size in TREE]
+
 
 def snapshot_download(repo_id: str, **kwargs: object) -> str:
     """Pretend to resolve a repository snapshot.

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 EXPECTED_FLAGS = {
+    "backend",
     "out",
     "subjects",
     "size",

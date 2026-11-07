@@ -96,6 +96,10 @@ class DiffusionPipeline:
         self.device = "cpu"
         self.progress_disabled = False
         self.lora_loaded = False
+        self.offloaded = False
+        # Keyword arguments of every render, so tests can assert on what the
+        # loader actually asked for (prompt, T5 length, LoRA scale).
+        self.calls: list[dict[str, object]] = []
 
     @classmethod
     def from_pretrained(cls, *args: object, **kwargs: object) -> DiffusionPipeline:
@@ -142,6 +146,21 @@ class DiffusionPipeline:
         del state_dict, kwargs
         self.lora_loaded = True
 
+    def load_lora_weights(self, source: str, **kwargs: object) -> None:
+        """Record that the LoRA was applied through the convenience loader.
+
+        Args:
+            source: Ignored.
+            **kwargs: Ignored.
+
+        """
+        del source, kwargs
+        self.lora_loaded = True
+
+    def enable_model_cpu_offload(self) -> None:
+        """Record that model CPU offload was enabled."""
+        self.offloaded = True
+
     def to(self, device: str) -> DiffusionPipeline:
         """Record the target device.
 
@@ -178,6 +197,7 @@ class DiffusionPipeline:
             A result holding one small RGB image.
 
         """
+        self.calls.append(kwargs)
         width = kwargs.get("width", RENDER_SIZE)
         height = kwargs.get("height", RENDER_SIZE)
         size = (

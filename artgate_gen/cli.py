@@ -7,9 +7,9 @@ importing torch.
 from __future__ import annotations
 
 import argparse
-import importlib
 from pathlib import Path
 
+from artgate_gen import backends
 from artgate_gen.console import emit
 from artgate_gen.profiling import RunProfile
 from artgate_gen.targets import TARGETS
@@ -113,6 +113,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="renders per subject, each with its own seed",
     )
     parser.add_argument("--seed", type=int, default=11, help="base seed")
+    parser.add_argument(
+        "--backend",
+        choices=sorted(backends.MODULES),
+        default=backends.DEFAULT,
+        help=f"diffusion backbone (default {backends.DEFAULT})",
+    )
     parser.add_argument("--keep-raw", action="store_true", help="also save 1024px")
     parser.add_argument(
         "--profile",
@@ -130,13 +136,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     """Generate every requested subject at the requested size."""
-    # Resolved here, not imported at module scope: `artgate_gen.pipeline`
-    # pulls in torch and diffusers, and deferring it means `--help`, argument
-    # parsing and the tests all work without the ML stack installed.
-    pipeline = importlib.import_module("artgate_gen.pipeline")
-
     parser = build_parser()
     args = parser.parse_args()
+    # Deferred so `--help` and parsing work without torch installed.
+    pipeline = backends.load(args.backend)
 
     pairs = _parse_subjects(parser, args.subjects)
 

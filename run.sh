@@ -20,6 +20,7 @@ readonly PY="$VENV/bin/python"
 OUT_DIR=""
 SIZE="64"
 CANDIDATES=1
+BACKEND="sdxl"
 SETUP_ONLY=0
 PROFILE=0
 SUBJECTS=()
@@ -33,6 +34,7 @@ Sets up the environment if needed, then generates gate-passing item icons.
 Options:
   -s, --size N          Icon edge in pixels (64, default, or 32), or WxH e.g. 256x64
   -c, --candidates N    Renders per subject, each with its own seed (default 1)
+  -b, --backend NAME    Diffusion backbone: sdxl (default) or sd35
       --setup-only      Install dependencies and the model, then exit
       --profile         Report where the time went, plus peak GPU/RAM/load
   -h, --help            Show this help
@@ -115,8 +117,6 @@ GATE_STATUS=0
 
 gate_one() {
     local icon="$1" spec="$2" icon_abs
-    # Kept absolute so the verdict's echoed path is unambiguous regardless of
-    # the caller's working directory.
     icon_abs="$(realpath "$icon")"
     # Branch on the process exit code, which is already meaningful (0 pass,
     # 1 gate failure, 2 harness error), instead of grepping the JSON for a
@@ -128,7 +128,6 @@ gate_one() {
     return $GATE_STATUS
 }
 
-# Set by repair_one to the repairer's output, so a crash is reportable.
 REPAIR_OUTPUT=""
 
 repair_one() {
@@ -172,7 +171,7 @@ main() {
     fi
 
     log "Generating ${#SUBJECTS[@]} subject(s) at $SIZE"
-    local gen_args=(--size "$SIZE" --candidates "$CANDIDATES")
+    local gen_args=(--size "$SIZE" --candidates "$CANDIDATES" --backend "$BACKEND")
     [[ $PROFILE -eq 1 ]] && gen_args+=(--profile)
     "$PY" "$SCRIPT_DIR/generate.py" "$OUT_DIR" "${SUBJECTS[@]}" "${gen_args[@]}"
 
@@ -232,6 +231,7 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -s|--size)       SIZE="$2"; shift 2 ;;
         -c|--candidates) CANDIDATES="$2"; shift 2 ;;
+        -b|--backend)    BACKEND="$2"; shift 2 ;;
         --setup-only)    SETUP_ONLY=1; shift ;;
         --profile)       PROFILE=1; shift ;;
         -h|--help)       usage ;;

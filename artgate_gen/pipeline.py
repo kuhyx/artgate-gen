@@ -198,6 +198,11 @@ def _load_unet_lora(pipe: Pipeline, *, local_files_only: bool) -> None:
     )
 
 
+def full_prompt(prompt: str, target: Target) -> str:
+    """Join ``target``'s style stem and ``prompt`` as sent to the pipeline."""
+    return f"{target.style}, {prompt}"
+
+
 def generate(pipe: Pipeline, prompt: str, seed: int, target: Target) -> Image.Image:
     """Render one candidate for ``prompt`` at ``target``'s render size.
 
@@ -219,7 +224,7 @@ def generate(pipe: Pipeline, prompt: str, seed: int, target: Target) -> Image.Im
     """
     width, height = target.render
     result = pipe(
-        prompt=f"{target.style}, {prompt}",
+        prompt=full_prompt(prompt, target),
         negative_prompt=target.negative,
         width=width,
         height=height,

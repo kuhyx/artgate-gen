@@ -109,6 +109,18 @@ class _Cuda:
     def empty_cache(self) -> None:
         """Release cached blocks; a no-op here."""
 
+    def reset_peak_memory_stats(self) -> None:
+        """Forget the recorded peak; a no-op here."""
+
+    def max_memory_allocated(self) -> int:
+        """Report the peak allocation since the last reset.
+
+        Returns:
+            The stubbed allocation, standing in for its own peak.
+
+        """
+        return self.allocated
+
     def get_device_name(self, index: int = 0) -> str:
         """Report the device name.
 
