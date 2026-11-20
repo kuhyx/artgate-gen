@@ -15,16 +15,12 @@ from pathlib import Path
 from statistics import fmean
 from typing import TYPE_CHECKING, Any
 
-import torch
-
 from artgate_gen import backends
 from artgate_gen.console import emit
 from artgate_gen.targets import TARGETS
 
 if TYPE_CHECKING:
     from types import ModuleType
-
-    from artgate_gen._types import Pipeline
 
 LONG_DETAIL = (
     "small silver stud earring in the left ear, a thin pale scar across the right "
@@ -37,7 +33,6 @@ LONG_DETAIL = (
     "slightly parted lips, chin level with the camera, ears half hidden by hair"
 )
 COPIED = ("seed", "style", "negative", "render", "canvas", "max_colors")
-MB = 2**20
 
 
 @dataclass(frozen=True)
@@ -87,7 +82,7 @@ def _jobs(
 
 
 def _render(
-    module: ModuleType, pipe: Pipeline, job: Job, folder: Path, art: Path
+    module: ModuleType, pipe: object, job: Job, folder: Path, art: Path
 ) -> dict[str, Any]:
     """Render ``job``, save raw and finished PNGs, and return its manifest entry."""
     src = job.source
@@ -116,14 +111,19 @@ def _render(
         "offload": getattr(module, "OFFLOAD", False),
         "clip_tokens": module.token_count(pipe, prompt),
     }
-    torch.cuda.reset_peak_memory_stats()
+    # Only a backend that renders in this process (SD3.5's torch) can report
+    # VRAM; SDXL renders in an sd-cli subprocess, so its entries record None.
+    reset = getattr(module, "reset_peak_vram", None)
+    peak = getattr(module, "peak_vram_mb", None)
+    if reset is not None:
+        reset()
     start = time.perf_counter()
     try:
         image = module.generate(pipe, job.prompt, src["seed"], target)
         entry |= {
             "status": "ok",
             "seconds": round(time.perf_counter() - start, 2),
-            "peak_vram_mb": round(torch.cuda.max_memory_allocated() / MB),
+            "peak_vram_mb": peak() if peak is not None else None,
         }
         (folder / "raw").mkdir(parents=True, exist_ok=True)
         image.save(folder / "raw" / path.name)
@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"--out must be a *-trial folder inside {art}")
     jobs = _jobs(parser, json.loads(args.manifest.read_text(encoding="utf-8")), args)
     module = backends.load(args.backend)
-    pipe: Pipeline = module.load_pipeline()
+    pipe: object = module.load_pipeline()
     folder = out / args.backend
     fresh: list[dict[str, Any]] = []
     for job in jobs:
@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
         _store(args.manifest, f"longctx-{args.backend}", fresh)
     ok = [e for e in fresh if e["status"] == "ok"]
     mean = fmean([e["seconds"] for e in ok] or [0.0])
-    peak = max((e["peak_vram_mb"] for e in ok), default=0)
+    peak = max((e["peak_vram_mb"] or 0 for e in ok), default=0)
     emit(
         f"{args.backend}: {len(ok)}/{len(fresh)} ok, {mean:.1f} s/image, peak {peak} MB"
     )

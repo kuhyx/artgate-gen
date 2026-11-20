@@ -57,3 +57,22 @@ def test_the_cli_renders_with_the_chosen_backend(
     main()
     check_equal(actual=used, expected=["sd35"], message="the SD3.5 loader ran")
     check(condition=(tmp_path / "axe.png").exists(), message="the icon was written")
+
+
+def test_sd35_without_torch_is_a_usage_error_naming_the_extra(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A default install asked for SD3.5 exits with the install hint on stderr."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["generate.py", str(tmp_path), "axe=a stone axe", "--backend", "sd35"],
+    )
+    with pytest.raises(SystemExit):
+        main()
+    stderr = capsys.readouterr().err
+    check(condition="install the sd35 extra" in stderr, message=stderr)
+    check(condition=not (tmp_path / "axe.png").exists(), message="nothing rendered")

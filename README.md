@@ -23,7 +23,10 @@ The base install is small on purpose, so the gate tools work anywhere. Only
 
 Rendering runs in `sd-cli` from [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)
 (MIT) on its Vulkan backend. There is no torch and no CUDA wheel anywhere in
-the dependency tree. `./run.sh --setup-only` installs `sd-cli` from the AUR
+the default dependency tree. The one exception is opt-in: the experimental
+`--backend sd35` (SD3.5-Large via diffusers) needs the `sd35` extra, which
+pulls CUDA torch; without it that backend exits with the install hint.
+`./run.sh --setup-only` installs `sd-cli` from the AUR
 (`stable-diffusion.cpp-vulkan-bin`); elsewhere, install stable-diffusion.cpp
 with Vulkan and put `sd-cli` on `PATH`, or point `ARTGATE_SD_CLI` at it.
 

@@ -35,6 +35,7 @@ Options:
   -s, --size N          Icon edge in pixels (64, default, or 32), or WxH e.g. 256x64
   -c, --candidates N    Renders per subject, each with its own seed (default 1)
   -b, --backend NAME    Diffusion backbone: sdxl (default) or sd35
+                        (sd35 needs the opt-in sd35 extra, not set up here)
       --setup-only      Install dependencies and the model, then exit
       --profile         Report where the time went, plus peak GPU/RAM/load
   -h, --help            Show this help

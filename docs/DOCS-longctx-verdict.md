@@ -14,6 +14,7 @@ Blocked on: SD3.5 terms (403 on 2026-11-05) and download go-ahead.
 
 Resume (steps 3-4 exceed the 60 s cap: start those turns with `LONG:`):
 
+0. In a separate venv, never the repo's torch-free one: `pip install -e ".[sd35]"` (CUDA torch; for the cu128 build add `--extra-index-url https://download.pytorch.org/whl/cu128`). SDXL now renders through sd.cpp, so its trial rows record `peak_vram_mb: null`.
 1. `scripts/check_hf_gate.sh stabilityai/stable-diffusion-3.5-large` then accept terms
 2. `scripts/check_hf_gate.sh stabilityai/stable-diffusion-3.5-large --verify-only`
 3. `python -m artgate_gen.sd35_fetch --download`

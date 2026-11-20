@@ -155,7 +155,10 @@ def main() -> None:
         parser.error(f"no target for size {args.size}")
 
     with RunProfile() as profile:
-        pipe = pipeline.load_pipeline(profile)
+        try:
+            pipe = pipeline.load_pipeline(profile)
+        except backends.MissingExtraError as exc:
+            parser.error(str(exc))
         for name, prompt in pairs:
             for c in range(args.candidates):
                 seed = args.seed + c

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import sys
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -117,8 +119,13 @@ def test_every_subject_is_rendered_and_recorded(manifest: Path) -> None:
         check(condition=(manifest.parent / entry["file"]).exists(), message="file")
 
 
-def test_the_sdxl_backend_runs_the_same_trial(manifest: Path) -> None:
-    """The sd.cpp SDXL backend fills the same fields under its own category."""
+def test_the_sdxl_backend_runs_the_same_trial(
+    manifest: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sd.cpp SDXL backend runs on a torch-free install, same fields."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+    importlib.reload(longctx_trial)
     check_equal(actual=_run(manifest, "--backend", "sdxl"), expected=0, message="ok")
     entries = json.loads(manifest.read_text(encoding="utf-8"))
     trial = [e for e in entries if e["category"] == "longctx-sdxl"]

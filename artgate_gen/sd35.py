@@ -1,18 +1,24 @@
-"""SD3.5-Large + ``nerijs/pixel-art-3.5L``, opt-in; rationale in docs/DOCS-longctx-*."""
+"""SD3.5-Large + ``nerijs/pixel-art-3.5L``, opt-in; rationale in docs/DOCS-longctx-*.
+
+torch and diffusers come only from the opt-in ``sd35`` extra, which pulls the
+CUDA torch wheels the default install avoids. They are imported on first use,
+so ``--backend`` parsing and ``sd35_fetch`` work without them, and a load
+without them fails with the install hint.
+"""
 
 from __future__ import annotations
 
+import importlib
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-import torch
-from diffusers import DiffusionPipeline
-from diffusers.utils import logging as diffusers_logging
 from huggingface_hub import snapshot_download
-from transformers import logging as transformers_logging
+
+from artgate_gen.backends import MissingExtraError
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
+    from types import ModuleType
 
     from PIL import Image
 
@@ -28,6 +34,11 @@ T5_MAX_LEN = 512
 STEPS = 28
 GUIDANCE = 3.5
 OFFLOAD = True
+MB = 2**20
+INSTALL_HINT = (
+    "SD3.5 needs torch and diffusers: install the sd35 extra "
+    "(pip install -e '.[sd35]'); it pulls the CUDA torch wheels."
+)
 ALLOW_PATTERNS = (
     "model_index.json",
     "scheduler/*",
@@ -69,6 +80,14 @@ class Sd35Pipeline(Protocol):
         ...
 
 
+def _extra(name: str) -> ModuleType:
+    """Import ``name`` from the ``sd35`` extra, or raise with the install hint."""
+    try:
+        return importlib.import_module(name)
+    except ImportError as exc:
+        raise MissingExtraError(INSTALL_HINT) from exc
+
+
 def _require_cache() -> None:
     """Raise ``NotCachedError`` unless the model and LoRA are already cached."""
     try:
@@ -92,14 +111,16 @@ def _null_span(_name: str, **_detail: object) -> Iterator[None]:
 
 def load_pipeline(profile: RunProfile | None = None) -> Sd35Pipeline:
     """Load SD3.5-Large in bf16 with the LoRA, CPU-offloaded to fit 24 GB."""
-    diffusers_logging.disable_progress_bar()
-    transformers_logging.disable_progress_bar()
+    torch = _extra("torch")
+    diffusers = _extra("diffusers")
+    _extra("diffusers.utils").logging.disable_progress_bar()
+    importlib.import_module("transformers").logging.disable_progress_bar()
     _require_cache()
     span = profile.phase if profile is not None else _null_span
     with span("load:pipeline"):
         pipe = cast(
             "Sd35Pipeline",
-            DiffusionPipeline.from_pretrained(
+            diffusers.DiffusionPipeline.from_pretrained(
                 MODEL, torch_dtype=torch.bfloat16, local_files_only=True
             ),
         )
@@ -134,6 +155,17 @@ def generate(pipe: Sd35Pipeline, prompt: str, seed: int, target: Target) -> Imag
         guidance_scale=GUIDANCE,
         max_sequence_length=T5_MAX_LEN,
         joint_attention_kwargs={"scale": LORA_SCALE},
-        generator=torch.Generator("cpu").manual_seed(seed),
+        generator=_extra("torch").Generator("cpu").manual_seed(seed),
     )
     return result.images[0]
+
+
+def reset_peak_vram() -> None:
+    """Forget torch's recorded peak, so the next read covers one render."""
+    _extra("torch").cuda.reset_peak_memory_stats()
+
+
+def peak_vram_mb() -> int:
+    """Return torch's peak GPU allocation since the last reset, in MiB."""
+    allocated: int = _extra("torch").cuda.max_memory_allocated()
+    return round(allocated / MB)

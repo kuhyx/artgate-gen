@@ -7,6 +7,7 @@ leads the prompt exactly once, and the long T5 channel is actually requested.
 
 from __future__ import annotations
 
+import importlib
 import sys
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
@@ -133,3 +134,22 @@ def test_generate_requests_the_long_channel_and_full_strength() -> None:
         message="the LoRA runs at its card's recommended strength",
     )
     check_equal(actual=image.size, expected=(32, 32), message="one render")
+
+
+def test_missing_torch_names_the_sd35_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without torch the module still imports, and loading says what to install.
+
+    torch lives only in the opt-in ``sd35`` extra, so a default install must be
+    able to import this module (``sd35_fetch`` reads its constants) and must
+    fail at load time with the fix, not with a bare ``ModuleNotFoundError``.
+    """
+    monkeypatch.setitem(sys.modules, "torch", None)
+    importlib.reload(sd35)
+    with pytest.raises(ImportError, match="install the sd35 extra"):
+        sd35.load_pipeline()
+
+
+def test_the_vram_probe_reads_torch() -> None:
+    """The trial's peak-VRAM probe resets and reads through torch."""
+    sd35.reset_peak_vram()
+    check_equal(actual=sd35.peak_vram_mb(), expected=0, message="no GPU, no peak")
