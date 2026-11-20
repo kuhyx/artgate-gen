@@ -8,11 +8,21 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from huggingface_hub import HfApi, snapshot_download
+from kuhy_credit import credit_line
 
 from artgate_gen.console import emit
 from artgate_gen.sd35 import ALLOW_PATTERNS, LORA, LORA_WEIGHTS, MODEL
 
 GB = 1e9
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Construct the argument parser.
+
+    Returns:
+        The configured parser.
+    """
+    return argparse.ArgumentParser(description=__doc__, epilog=credit_line())
 
 
 def planned_bytes() -> int:
@@ -27,7 +37,7 @@ def planned_bytes() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Print download size and free disk; download only with ``--download``."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = build_parser()
     parser.add_argument("--download", action="store_true", help="fetch the weights")
     args = parser.parse_args(argv)
     if args.download:

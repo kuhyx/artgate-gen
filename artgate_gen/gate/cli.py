@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+from kuhy_credit import credit_line
 from PIL import Image, UnidentifiedImageError
 
 from artgate_gen.gate.backdrop import (
@@ -43,6 +44,19 @@ from artgate_gen.gate.spec import SpecError, TargetSpec, load_spec
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Construct the argument parser.
+
+    Returns:
+        The configured parser.
+    """
+    return argparse.ArgumentParser(
+        prog="artgate",
+        description="Gate generated game art deterministically.",
+        epilog=credit_line(),
+    )
 
 
 def _check_canvas(rgba: np.ndarray, spec: TargetSpec) -> list[Code]:
@@ -145,10 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The process exit code.
     """
-    parser = argparse.ArgumentParser(
-        prog="artgate",
-        description="Gate generated game art deterministically.",
-    )
+    parser = build_parser()
     parser.add_argument("image", type=Path, help="PNG to check")
     parser.add_argument("--spec", type=Path, required=True, help="TOML spec")
     parser.add_argument(

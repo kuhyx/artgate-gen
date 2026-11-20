@@ -15,7 +15,18 @@ import argparse
 import json
 from pathlib import Path
 
+from kuhy_credit import credit_line
+
 from artgate_gen.repair import repair
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Construct the argument parser.
+
+    Returns:
+        The configured parser.
+    """
+    return argparse.ArgumentParser(description=__doc__, epilog=credit_line())
 
 
 def parse_codes(raw: str) -> list[str]:
@@ -50,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         ``0`` when a repair was written, ``1`` when none was attempted.
 
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = build_parser()
     parser.add_argument("icon", type=Path, help="the failing icon")
     parser.add_argument("--spec", type=Path, required=True, help="artgate spec")
     parser.add_argument("--codes", required=True, help="the artgate CLI's JSON verdict")

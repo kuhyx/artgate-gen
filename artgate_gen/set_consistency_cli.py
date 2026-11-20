@@ -17,6 +17,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from kuhy_credit import credit_line
+
 from artgate_gen.set_consistency import (
     RegionSpec,
     channel_spread,
@@ -31,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     Returns:
         The parser.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, epilog=credit_line())
     parser.add_argument("paths", type=Path, nargs="+")
     parser.add_argument("--lead", type=int, nargs=2, default=[2, 0])
     parser.add_argument("--lead-margin", type=float, default=12.0)

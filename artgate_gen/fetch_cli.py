@@ -11,17 +11,31 @@ idempotent, so a plain re-run is always safe.
 
 from __future__ import annotations
 
+import argparse
+
+from kuhy_credit import credit_line
+
 from artgate_gen.fetch import fetch_thrifty
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser."""
+    desc = "Populate the local Hugging Face cache for the models this package uses."
+    return argparse.ArgumentParser(description=desc, epilog=credit_line())
+
+
+def main(argv: list[str] | None = None) -> int:
     """Populate the local Hugging Face cache for the models this package uses.
+
+    Args:
+        argv: Argument vector; ``None`` reads ``sys.argv[1:]``.
 
     Returns:
         ``0`` always; :func:`~artgate_gen.fetch.fetch_thrifty` reports its own
         status and only raises on a genuine download failure.
 
     """
+    build_parser().parse_args(argv)
     fetch_thrifty()
     return 0
 

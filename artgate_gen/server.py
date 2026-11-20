@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import numpy as np
+from kuhy_credit import URL as CREDIT_URL
 from mcp.server.fastmcp import FastMCP
 from PIL import Image
 from pydantic import Field
@@ -33,7 +34,8 @@ from artgate_gen.generation import generate_icons as _generate_icons
 from artgate_gen.generation import state
 from artgate_gen.unload import IDLE_UNLOAD_SECONDS, start_unloader
 
-mcp = FastMCP("artgate")
+# MCP clients show websiteUrl in the server info: the shared kuhy credit.
+mcp = FastMCP("artgate", website_url=CREDIT_URL)
 
 # Alpha at or above this counts a pixel as opaque when describing an icon.
 OPAQUE_CUTOFF = 127

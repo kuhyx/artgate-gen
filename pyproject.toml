@@ -22,7 +22,12 @@ classifiers = [
 # Rendering itself runs in stable-diffusion.cpp's `sd-cli` binary (MIT, Vulkan),
 # which `run.sh --setup-only` installs; no torch, no CUDA wheels. Both
 # backends (`--backend sdxl` and `sd35`) render through it.
-dependencies = ["pillow>=11", "numpy>=2", "mcp>=1.12,<2"]
+dependencies = [
+  "pillow>=11",
+  "numpy>=2",
+  "mcp>=1.12,<2",
+  "kuhy-credit @ git+https://github.com/kuhyx/utils@kuhy-credit-v0.3.0#subdirectory=kuhy_credit",
+]
 
 [project.optional-dependencies]
 generate = [
@@ -41,6 +46,9 @@ artgate-gate = "artgate_gen.gate.cli:main"
 [project.urls]
 Homepage = "https://github.com/kuhyx/artgate-gen"
 Issues = "https://github.com/kuhyx/artgate-gen/issues"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["artgate_gen"]
@@ -98,9 +106,16 @@ show_error_codes = true
 # installs only `.[dev]`. Without this, mypy would pass locally (where the venv
 # has them) and fail in CI -- the exact green-local/red-CI split the pinned
 # ruff version exists to prevent.
+# kuhy_credit ships no py.typed marker (pinned git dependency from kuhyx/utils),
+# so we accept the missing-import error for it but still want its real code
+# checked — hence follow_untyped_imports rather than ignore_missing_imports.
 [[tool.mypy.overrides]]
 module = ["transformers.*", "huggingface_hub.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["kuhy_credit", "kuhy_credit.*"]
+follow_untyped_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

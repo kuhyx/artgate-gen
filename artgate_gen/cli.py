@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from kuhy_credit import credit_line
+
 from artgate_gen import backends
 from artgate_gen.console import emit
 from artgate_gen.profiling import RunProfile
@@ -91,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     Returns:
         The configured parser.
     """
-    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=credit_line())
     parser.add_argument("out", type=Path, help="output directory")
     parser.add_argument(
         "subjects",

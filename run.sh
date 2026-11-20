@@ -48,6 +48,10 @@ Prompt tips (measured): name the object once and add two or three concrete
 attributes. Negation does not work ("no tree" pushes toward trees) and
 repeating the noun multiplies the object. Change the seed before the prompt.
 EOF
+    # kuhyx/utils credit: venv copy, else PATH (CI); none before first setup.
+    local credit="$VENV/bin/kuhy-credit"
+    [[ -x "$credit" ]] || credit="$(command -v kuhy-credit || true)"
+    [[ -z "$credit" ]] || { printf '\n'; "$credit"; }
     exit 0
 }
 

@@ -23,7 +23,7 @@ def test_main_fetches_and_reports_success(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A cached run reports the cache status and exits cleanly."""
-    code = main()
+    code = main([])
     check_equal(actual=code, expected=EXIT_OK, message="fetch reports success")
     out = capsys.readouterr().out
     check(condition="cached" in out, message="reports the cache status")

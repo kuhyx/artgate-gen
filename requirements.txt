@@ -10,3 +10,5 @@ huggingface_hub==1.27.0
 pillow==12.3.0
 numpy==2.5.2
 mcp==1.29.0
+# The shared "Created by kuhy" credit every --help ends on (kuhyx/utils, tag pin).
+kuhy-credit @ git+https://github.com/kuhyx/utils@kuhy-credit-v0.3.0#subdirectory=kuhy_credit
