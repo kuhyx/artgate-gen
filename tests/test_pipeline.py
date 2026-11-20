@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from artgate_gen import pipeline, prompt_budget
+from artgate_gen import pipeline, prompt_budget, sd_cli
 from artgate_gen.profiling import RunProfile
 from artgate_gen.targets import TARGETS
 from tests.assertions import check, check_equal, check_length
@@ -58,7 +58,7 @@ def test_load_pipeline_falls_back_to_path(
     fake_sd_cli: Path,
 ) -> None:
     """With no override the binary is looked up on PATH by its own name."""
-    monkeypatch.delenv(pipeline.SD_CLI_ENV)
+    monkeypatch.delenv(sd_cli.SD_CLI_ENV)
     monkeypatch.setenv("PATH", str(fake_sd_cli.parent))
     pipe = pipeline.load_pipeline()
     check_equal(actual=pipe.binary, expected=str(fake_sd_cli), message="PATH hit")
@@ -69,8 +69,8 @@ def test_a_missing_binary_fails_visibly_with_the_setup_command(
     tmp_path: Path,
 ) -> None:
     """No sd-cli means an error naming the fix, not a crash mid-render."""
-    monkeypatch.setenv(pipeline.SD_CLI_ENV, str(tmp_path / "absent"))
-    with pytest.raises(pipeline.SdCliMissingError, match=r"run\.sh --setup-only"):
+    monkeypatch.setenv(sd_cli.SD_CLI_ENV, str(tmp_path / "absent"))
+    with pytest.raises(sd_cli.SdCliMissingError, match=r"run\.sh --setup-only"):
         pipeline.load_pipeline()
 
 
@@ -194,7 +194,7 @@ def test_a_bad_render_raises_with_the_reason(
 ) -> None:
     """Exit 0 is not trusted: a missing or wrong-sized PNG is an error too."""
     monkeypatch.setenv("FAKE_SD_MODE", mode)
-    with pytest.raises(pipeline.SdCliError, match=match):
+    with pytest.raises(sd_cli.SdCliError, match=match):
         _icon(pipeline.load_pipeline())
 
 

@@ -12,8 +12,8 @@ MODULES = {"sdxl": "artgate_gen.pipeline", "sd35": "artgate_gen.sd35"}
 DEFAULT = "sdxl"
 
 
-class MissingExtraError(ImportError):
-    """A backend needs an opt-in extra that this install does not have."""
+class BackendUnavailableError(RuntimeError):
+    """A backend cannot render on this machine yet, e.g. its weights are absent."""
 
 
 def load(name: str) -> ModuleType:

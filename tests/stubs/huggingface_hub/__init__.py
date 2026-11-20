@@ -23,12 +23,17 @@ missing: set[str] = set()
 calls: list[str] = []
 
 # What `HfApi.list_repo_tree` reports: (path, size in bytes). A trimmed copy of
-# the real SD3.5-Large listing, keeping one file the fetch must skip.
+# the real SD3.5-Large listing, keeping files the fetch must skip: the fp8 T5
+# and the diffusers folders sd.cpp never reads.
 TREE = (
     ("model_index.json", 706),
     ("sd3.5_large.safetensors", 16_460_379_262),
+    ("text_encoders/clip_g.safetensors", 1_389_382_176),
+    ("text_encoders/clip_l.safetensors", 246_144_152),
+    ("text_encoders/t5xxl_fp16.safetensors", 9_787_841_024),
+    ("text_encoders/t5xxl_fp8_e4m3fn.safetensors", 4_893_934_904),
+    ("tokenizer/vocab.json", 1_059_962),
     ("transformer/diffusion_pytorch_model-00001-of-00002.safetensors", 9_985_185_992),
-    ("vae/diffusion_pytorch_model.safetensors", 167_666_902),
 )
 
 

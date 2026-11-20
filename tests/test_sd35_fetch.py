@@ -11,13 +11,13 @@ from tests.assertions import check, check_equal
 if TYPE_CHECKING:
     import pytest
 
-# Sum of the stub listing minus the root single-file checkpoint, which the
-# diffusers loader never reads.
-NEEDED_BYTES = 706 + 9_985_185_992 + 167_666_902
+# The single-file model, the three fp16 text encoders and the tokenizer: what
+# sd-cli and the token counter read. Not the fp8 T5, not the diffusers folders.
+NEEDED_BYTES = 16_460_379_262 + 1_389_382_176 + 246_144_152 + 9_787_841_024 + 1_059_962
 
 
 def test_plan_counts_only_what_the_loader_reads() -> None:
-    """The ComfyUI single-file checkpoint is not part of the download."""
+    """The diffusers folders and the fp8 T5 are not part of the download."""
     check_equal(
         actual=sd35_fetch.planned_bytes(),
         expected=NEEDED_BYTES,
@@ -30,7 +30,7 @@ def test_the_default_run_only_reports(capsys: pytest.CaptureFixture[str]) -> Non
     code = sd35_fetch.main([])
     out = capsys.readouterr().out
     check_equal(actual=code, expected=0, message="reporting succeeds")
-    check(condition="10.2 GB" in out, message=out)
+    check(condition="27.9 GB" in out, message=out)
     check(condition="free" in out, message=out)
     check_equal(
         actual=sys.modules["huggingface_hub"].calls,

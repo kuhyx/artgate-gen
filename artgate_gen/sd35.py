@@ -1,24 +1,35 @@
 """SD3.5-Large + ``nerijs/pixel-art-3.5L``, opt-in; rationale in docs/DOCS-longctx-*.
 
-torch and diffusers come only from the opt-in ``sd35`` extra, which pulls the
-CUDA torch wheels the default install avoids. They are imported on first use,
-so ``--backend`` parsing and ``sd35_fetch`` work without them, and a load
-without them fails with the install hint.
+Renders through stable-diffusion.cpp's ``sd-cli``, the same binary and runner
+as the SDXL backend, so this backend needs no torch and no extra install.
+
+sd.cpp reads the ComfyUI-style single files from the gated SD3.5 repo: the
+model (which carries the VAE) plus the CLIP-L, CLIP-G and T5-XXL encoders. The
+SD3.5 licence must be accepted on Hugging Face before they can be fetched, so
+loading never downloads: ``python -m artgate_gen.sd35_fetch --download`` is
+the only way in.
+
+sd.cpp encodes the T5 prompt in separate 77-token windows, as it does CLIP, so
+it does not give the single 512-token T5 window diffusers' ``max_sequence_length``
+did. Long prompts are split, not truncated.
 """
 
 from __future__ import annotations
 
-import importlib
+import contextlib
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download
 
-from artgate_gen.backends import MissingExtraError
+from artgate_gen import prompt_budget
+from artgate_gen.backends import BackendUnavailableError
+from artgate_gen.sd_cli import find_sd_cli, run_sd_cli
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
-    from types import ModuleType
+    from collections.abc import Iterator
 
     from PIL import Image
 
@@ -26,81 +37,88 @@ if TYPE_CHECKING:
     from artgate_gen.targets import Target
 
 MODEL = "stabilityai/stable-diffusion-3.5-large"
+CHECKPOINT = "sd3.5_large.safetensors"
+CLIP_L = "text_encoders/clip_l.safetensors"
+CLIP_G = "text_encoders/clip_g.safetensors"
+T5XXL = "text_encoders/t5xxl_fp16.safetensors"
+# For prompt_budget.token_count only; CLIPTokenizer reads the whole folder.
+TOKENIZER = "tokenizer/vocab.json"
 LORA = "nerijs/pixel-art-3.5L"
 LORA_WEIGHTS = "pixel-art-3.5L-v2_000000300.safetensors"
 LORA_SCALE = 1.0
+# sd.cpp applies a LoRA named in the prompt as `<lora:NAME:WEIGHT>`, looking
+# NAME up in --lora-model-dir.
+LORA_TAG = f"<lora:{Path(LORA_WEIGHTS).stem}:{LORA_SCALE:g}>"
 TRIGGER = "pixel art"
-T5_MAX_LEN = 512
 STEPS = 28
 GUIDANCE = 3.5
+SAMPLER = "euler"
+# The fp16 model and T5 together exceed a 24 GB card; sd.cpp keeps weights in
+# RAM and moves each stage into VRAM when it runs.
 OFFLOAD = True
-MB = 2**20
-INSTALL_HINT = (
-    "SD3.5 needs torch and diffusers: install the sd35 extra "
-    "(pip install -e '.[sd35]'); it pulls the CUDA torch wheels."
-)
-ALLOW_PATTERNS = (
-    "model_index.json",
-    "scheduler/*",
-    "tokenizer/*",
-    "tokenizer_2/*",
-    "tokenizer_3/*",
-    "transformer/*",
-    "vae/*",
-    "text_encoder/config.json",
-    "text_encoder/model.safetensors",
-    "text_encoder_2/config.json",
-    "text_encoder_2/model.safetensors",
-    "text_encoder_3/config.json",
-    "text_encoder_3/model.safetensors.index.json",
-    "text_encoder_3/model-0000?-of-00002.safetensors",
-)
+# What `sd35_fetch` downloads: exactly the files above, not the diffusers
+# folders or the fp8 T5 that share the repo.
+ALLOW_PATTERNS = (CHECKPOINT, CLIP_L, CLIP_G, T5XXL, "tokenizer/*")
 
 
-class NotCachedError(RuntimeError):
+class NotCachedError(BackendUnavailableError):
     """The SD3.5 weights are not on disk; loading never downloads them."""
 
 
-class InferenceResult(Protocol):
-    """The subset of a diffusers pipeline result this module reads."""
+@dataclass(frozen=True, slots=True)
+class Sd35Pipeline:
+    """Everything ``sd-cli`` needs for an SD3.5 render besides the prompt.
 
-    images: Sequence[Image.Image]
+    Attributes:
+        binary: Path to the ``sd-cli`` executable.
+        model: The single-file SD3.5-Large model, VAE included.
+        clip_l: The CLIP-L text encoder.
+        clip_g: The CLIP-G text encoder.
+        t5xxl: The fp16 T5-XXL text encoder.
+        lora_dir: Directory holding the pixel-art LoRA.
+        tokenizer_dir: The CLIP tokenizer, for ``token_count``.
+    """
 
-
-class Sd35Pipeline(Protocol):
-    """The subset of ``StableDiffusion3Pipeline`` this module uses."""
-
-    tokenizer: Any
-    load_lora_weights: Any
-    enable_model_cpu_offload: Any
-    set_progress_bar_config: Any
-
-    def __call__(self, **kwargs: object) -> InferenceResult:
-        """Run inference."""
-        ...
-
-
-def _extra(name: str) -> ModuleType:
-    """Import ``name`` from the ``sd35`` extra, or raise with the install hint."""
-    try:
-        return importlib.import_module(name)
-    except ImportError as exc:
-        raise MissingExtraError(INSTALL_HINT) from exc
+    binary: str
+    model: Path
+    clip_l: Path
+    clip_g: Path
+    t5xxl: Path
+    lora_dir: Path
+    tokenizer_dir: Path
 
 
-def _require_cache() -> None:
-    """Raise ``NotCachedError`` unless the model and LoRA are already cached."""
-    try:
-        snapshot_download(
-            MODEL, allow_patterns=list(ALLOW_PATTERNS), local_files_only=True
-        )
-        snapshot_download(LORA, allow_patterns=[LORA_WEIGHTS], local_files_only=True)
-    except Exception as exc:
+def _cached(wanted: list[tuple[str, str]]) -> list[Path]:
+    """Return the cached path of each ``(repo, file)``, never downloading.
+
+    Args:
+        wanted: The files to look up.
+
+    Returns:
+        Their local paths, in order.
+
+    Raises:
+        NotCachedError: Naming every missing file and the fetch command.
+    """
+    found: list[Path] = []
+    missing: list[str] = []
+    for repo, filename in wanted:
+        path: str | None = None
+        # huggingface_hub's "not cached" errors vary by version; see pipeline.resolve.
+        with contextlib.suppress(Exception):
+            path = hf_hub_download(repo, filename, local_files_only=True)
+        if path is None:
+            missing.append(f"{repo}/{filename}")
+        else:
+            found.append(Path(path))
+    if missing:
         message = (
-            f"{MODEL} or {LORA} is not cached; run `python -m "
-            "artgate_gen.sd35_fetch` for the size, then add `--download`."
+            f"not cached: {', '.join(missing)}. Accept the SD3.5 licence on "
+            "Hugging Face, then run `python -m artgate_gen.sd35_fetch` for the "
+            "size and add `--download`."
         )
-        raise NotCachedError(message) from exc
+        raise NotCachedError(message)
+    return found
 
 
 @contextmanager
@@ -110,26 +128,32 @@ def _null_span(_name: str, **_detail: object) -> Iterator[None]:
 
 
 def load_pipeline(profile: RunProfile | None = None) -> Sd35Pipeline:
-    """Load SD3.5-Large in bf16 with the LoRA, CPU-offloaded to fit 24 GB."""
-    torch = _extra("torch")
-    diffusers = _extra("diffusers")
-    _extra("diffusers.utils").logging.disable_progress_bar()
-    importlib.import_module("transformers").logging.disable_progress_bar()
-    _require_cache()
+    """Find ``sd-cli`` and the cached SD3.5 weights; nothing loads into memory.
+
+    Args:
+        profile: When given, the resolution step is timed.
+
+    Returns:
+        The resolved render inputs.
+    """
     span = profile.phase if profile is not None else _null_span
-    with span("load:pipeline"):
-        pipe = cast(
-            "Sd35Pipeline",
-            diffusers.DiffusionPipeline.from_pretrained(
-                MODEL, torch_dtype=torch.bfloat16, local_files_only=True
-            ),
+    with span("load:resolve"):
+        binary = find_sd_cli()
+        model, clip_l, clip_g, t5xxl, vocab, lora = _cached(
+            [
+                *((MODEL, f) for f in (CHECKPOINT, CLIP_L, CLIP_G, T5XXL, TOKENIZER)),
+                (LORA, LORA_WEIGHTS),
+            ]
         )
-    with span("load:lora"):
-        pipe.load_lora_weights(LORA, weight_name=LORA_WEIGHTS, local_files_only=True)
-    with span("load:offload"):
-        pipe.enable_model_cpu_offload()
-    pipe.set_progress_bar_config(disable=True)
-    return pipe
+        return Sd35Pipeline(
+            binary=binary,
+            model=model,
+            clip_l=clip_l,
+            clip_g=clip_g,
+            t5xxl=t5xxl,
+            lora_dir=lora.parent,
+            tokenizer_dir=vocab.parent,
+        )
 
 
 def full_prompt(prompt: str, target: Target) -> str:
@@ -139,33 +163,51 @@ def full_prompt(prompt: str, target: Target) -> str:
 
 
 def token_count(pipe: Sd35Pipeline, text: str) -> int:
-    """Return how many CLIP tokens ``text`` costs on the first text encoder."""
-    return len(pipe.tokenizer(text)["input_ids"])
+    """Return how many CLIP tokens ``text`` costs; see ``prompt_budget``."""
+    return prompt_budget.token_count(pipe, text)
+
+
+def build_argv(
+    pipe: Sd35Pipeline, prompt: str, seed: int, target: Target, out: Path
+) -> list[str]:
+    """Return the ``sd-cli`` command line for one SD3.5 render.
+
+    Args:
+        pipe: The resolved render inputs.
+        prompt: The subject, appended to the target's style stem.
+        seed: Seed for the sampler.
+        target: What is being rendered.
+        out: Where ``sd-cli`` writes the PNG.
+
+    Returns:
+        The argv, binary first.
+    """
+    width, height = target.render
+    return [
+        pipe.binary,
+        *("-m", str(pipe.model), "--clip_l", str(pipe.clip_l)),
+        *("--clip_g", str(pipe.clip_g), "--t5xxl", str(pipe.t5xxl)),
+        *("--lora-model-dir", str(pipe.lora_dir)),
+        *("-p", full_prompt(prompt, target) + LORA_TAG, "-n", target.negative),
+        *("--steps", str(STEPS), "--cfg-scale", str(GUIDANCE)),
+        *("--sampling-method", SAMPLER, "-s", str(seed)),
+        *("-W", str(width), "-H", str(height), "-o", str(out)),
+        *(("--offload-to-cpu",) if OFFLOAD else ()),
+    ]
 
 
 def generate(pipe: Sd35Pipeline, prompt: str, seed: int, target: Target) -> Image.Image:
-    """Render one image of ``prompt`` at ``target.render`` with the long T5 window."""
-    width, height = target.render
-    result = pipe(
-        prompt=full_prompt(prompt, target),
-        negative_prompt=target.negative,
-        width=width,
-        height=height,
-        num_inference_steps=STEPS,
-        guidance_scale=GUIDANCE,
-        max_sequence_length=T5_MAX_LEN,
-        joint_attention_kwargs={"scale": LORA_SCALE},
-        generator=_extra("torch").Generator("cpu").manual_seed(seed),
+    """Render one image of ``prompt`` at ``target.render``.
+
+    Args:
+        pipe: The resolved render inputs.
+        prompt: The subject, appended to the target's style stem.
+        seed: Seed for the sampler.
+        target: What is being rendered.
+
+    Returns:
+        One render at ``target.render``.
+    """
+    return run_sd_cli(
+        lambda out: build_argv(pipe, prompt, seed, target, out), target.render
     )
-    return result.images[0]
-
-
-def reset_peak_vram() -> None:
-    """Forget torch's recorded peak, so the next read covers one render."""
-    _extra("torch").cuda.reset_peak_memory_stats()
-
-
-def peak_vram_mb() -> int:
-    """Return torch's peak GPU allocation since the last reset, in MiB."""
-    allocated: int = _extra("torch").cuda.max_memory_allocated()
-    return round(allocated / MB)

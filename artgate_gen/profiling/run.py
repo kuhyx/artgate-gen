@@ -128,7 +128,7 @@ class RunProfile:
         measurement, and "it got slower" is unanswerable without knowing whether
         any of these moved. The device itself is named in sd-cli's own log.
         """
-        # Same seam as `pipeline.SD_CLI_ENV`, spelled out rather than imported:
+        # Same seam as `sd_cli.SD_CLI_ENV`, spelled out rather than imported:
         # the pipeline imports huggingface_hub, and the CLI imports this module
         # in the base install, which does not have it.
         binary = os.environ.get("ARTGATE_SD_CLI") or "sd-cli"

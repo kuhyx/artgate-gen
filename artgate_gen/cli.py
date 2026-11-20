@@ -157,7 +157,7 @@ def main() -> None:
     with RunProfile() as profile:
         try:
             pipe = pipeline.load_pipeline(profile)
-        except backends.MissingExtraError as exc:
+        except backends.BackendUnavailableError as exc:
             parser.error(str(exc))
         for name, prompt in pairs:
             for c in range(args.candidates):

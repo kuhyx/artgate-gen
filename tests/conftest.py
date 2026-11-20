@@ -28,13 +28,6 @@ FAKE_SD_CLI = Path(__file__).parent / "fake_sd_cli.py"
 # real: the finisher and the gate do genuine array work, and faking them would
 # make the coverage meaningless.
 STUBBED = (
-    # torch and diffusers only back the opt-in SD3.5 backend (the `sd35`
-    # extra); the repo venv never installs them.
-    "torch",
-    "diffusers",
-    # A real submodule path, because sd35 does
-    # `from diffusers.utils import logging`.
-    "diffusers.utils",
     "transformers",
     "huggingface_hub",
     # Real submodule paths, because fetch.py does
@@ -90,10 +83,10 @@ def _reset_stub_state(
         Control to the test.
 
     """
-    # Imported here, not at module scope: the pipeline imports huggingface_hub,
-    # which must resolve to the stub installed above, not the real library.
-    pipeline = importlib.import_module("artgate_gen.pipeline")
-    monkeypatch.setenv(pipeline.SD_CLI_ENV, str(fake_sd_cli))
+    # Imported here, not at module scope, so nothing in the package loads
+    # before the stubs above are in place.
+    sd_cli = importlib.import_module("artgate_gen.sd_cli")
+    monkeypatch.setenv(sd_cli.SD_CLI_ENV, str(fake_sd_cli))
     monkeypatch.delenv("FAKE_SD_MODE", raising=False)
     monkeypatch.delenv("FAKE_SD_ARGV", raising=False)
     hub = sys.modules["huggingface_hub"]

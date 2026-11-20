@@ -38,12 +38,11 @@ from __future__ import annotations
 
 import importlib
 from functools import cache
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable, Mapping
-
-    from artgate_gen._types import Pipeline
+    from pathlib import Path
 
     Tokenizer = Callable[[str], Mapping[str, list[int]]]
 
@@ -51,7 +50,16 @@ if TYPE_CHECKING:  # pragma: no cover
 CLIP_CONTEXT = 77
 
 
-def token_count(pipe: Pipeline, text: str) -> int:
+class HasTokenizer(Protocol):
+    """Any backend's resolved inputs that carry a CLIP tokenizer folder."""
+
+    @property
+    def tokenizer_dir(self) -> Path:
+        """The folder ``CLIPTokenizer.from_pretrained`` reads."""
+        ...
+
+
+def token_count(pipe: HasTokenizer, text: str) -> int:
     """Count the CLIP tokens a prompt costs, including its start/end markers.
 
     Args:
@@ -73,7 +81,7 @@ def _tokenizer(directory: str) -> Tokenizer:
     ``pyproject.toml``), hence the cast.
 
     Args:
-        directory: The SDXL snapshot's ``tokenizer`` folder.
+        directory: The backend snapshot's ``tokenizer`` folder.
 
     Returns:
         A callable CLIP tokenizer.

@@ -20,7 +20,8 @@ classifiers = [
 # model, so a reviewer (or Glama's build sandbox) can install and introspect the
 # server without the model tooling. Generation lives in the `generate` extra.
 # Rendering itself runs in stable-diffusion.cpp's `sd-cli` binary (MIT, Vulkan),
-# which `run.sh --setup-only` installs; no torch, no CUDA wheels.
+# which `run.sh --setup-only` installs; no torch, no CUDA wheels. Both
+# backends (`--backend sdxl` and `sd35`) render through it.
 dependencies = ["pillow>=11", "numpy>=2", "mcp>=1.12,<2"]
 
 [project.optional-dependencies]
@@ -29,19 +30,6 @@ generate = [
   "huggingface_hub>=1.27",
   # CLIP tokenizer only, for prompt_budget.token_count. Needs no torch.
   "transformers>=5.15",
-]
-# Opt-in only, for `--backend sd35` (SD3.5-Large via diffusers). torch from PyPI
-# pulls NVIDIA's CUDA wheels, which is exactly what the default install avoids,
-# so this extra is never in requirements.txt, `generate`, run.sh or the image.
-sd35 = [
-  "artgate-gen[generate]",
-  "torch>=2.11",
-  "diffusers>=0.39",
-  # enable_model_cpu_offload
-  "accelerate>=1.14",
-  # load_lora_weights
-  "peft>=0.20",
-  "safetensors>=0.8",
 ]
 dev = ["pytest>=8", "pytest-cov>=6", "ruff==0.15.2", "mypy>=1.14"]
 
@@ -111,18 +99,8 @@ show_error_codes = true
 # has them) and fail in CI -- the exact green-local/red-CI split the pinned
 # ruff version exists to prevent.
 [[tool.mypy.overrides]]
-module = ["transformers.*", "huggingface_hub.*", "torch.*", "diffusers.*"]
+module = ["transformers.*", "huggingface_hub.*"]
 ignore_missing_imports = true
-
-# torch and diffusers belong to the opt-in `sd35` extra only. diffusers'
-# `from_pretrained` and parts of torch are untyped, so untyped calls are allowed
-# in the modules that drive SD3.5 -- every other module keeps full strict mode.
-[[tool.mypy.overrides]]
-module = [
-  "artgate_gen.sd35",
-  "tests.test_sd35",
-]
-disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

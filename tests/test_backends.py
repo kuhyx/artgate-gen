@@ -59,13 +59,14 @@ def test_the_cli_renders_with_the_chosen_backend(
     check(condition=(tmp_path / "axe.png").exists(), message="the icon was written")
 
 
-def test_sd35_without_torch_is_a_usage_error_naming_the_extra(
+def test_sd35_without_cached_weights_is_a_usage_error_naming_the_fetch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A default install asked for SD3.5 exits with the install hint on stderr."""
-    monkeypatch.setitem(sys.modules, "torch", None)
+    """Uncached SD3.5 weights exit with the fetch command; nothing downloads."""
+    hub = sys.modules["huggingface_hub"]
+    hub.missing.add(sd35.MODEL)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -74,5 +75,6 @@ def test_sd35_without_torch_is_a_usage_error_naming_the_extra(
     with pytest.raises(SystemExit):
         main()
     stderr = capsys.readouterr().err
-    check(condition="install the sd35 extra" in stderr, message=stderr)
+    check(condition="artgate_gen.sd35_fetch" in stderr, message=stderr)
+    check(condition=sd35.CHECKPOINT in stderr, message=stderr)
     check(condition=not (tmp_path / "axe.png").exists(), message="nothing rendered")

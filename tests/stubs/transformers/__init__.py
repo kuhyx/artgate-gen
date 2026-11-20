@@ -1,8 +1,7 @@
 """A minimal stand-in for :mod:`transformers`.
 
-The CLIP tokenizer is touched by ``prompt_budget.token_count`` (the SDXL
-render itself runs in stable-diffusion.cpp, which tokenizes on its own), and
-the progress-bar control by the SD3.5 loader.
+The CLIP tokenizer is touched by ``prompt_budget.token_count``; rendering
+runs in stable-diffusion.cpp, which tokenizes on its own.
 """
 
 from __future__ import annotations
@@ -14,15 +13,6 @@ from tests.stubs._inert import fallback
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-
-class _Logging:
-    """Stands in for ``transformers.logging``, which the SD3.5 loader silences."""
-
-    def disable_progress_bar(self) -> None:
-        """Silence progress bars; a no-op here."""
-
-
-logging = _Logging()
 
 # Every directory passed to `CLIPTokenizer.from_pretrained`, in call order.
 loads: list[str] = []

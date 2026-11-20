@@ -107,23 +107,17 @@ def _render(
         "lora_scale": getattr(module, "LORA_SCALE", 1.0),
         "steps": module.STEPS,
         "guidance": module.GUIDANCE,
-        "t5_max_len": getattr(module, "T5_MAX_LEN", None),
         "offload": getattr(module, "OFFLOAD", False),
         "clip_tokens": module.token_count(pipe, prompt),
     }
-    # Only a backend that renders in this process (SD3.5's torch) can report
-    # VRAM; SDXL renders in an sd-cli subprocess, so its entries record None.
-    reset = getattr(module, "reset_peak_vram", None)
-    peak = getattr(module, "peak_vram_mb", None)
-    if reset is not None:
-        reset()
+    # Both backends render in an sd-cli subprocess, which logs its own VRAM
+    # use; `./run.sh --profile` reports the peak. Nothing here can read it.
     start = time.perf_counter()
     try:
         image = module.generate(pipe, job.prompt, src["seed"], target)
         entry |= {
             "status": "ok",
             "seconds": round(time.perf_counter() - start, 2),
-            "peak_vram_mb": peak() if peak is not None else None,
         }
         (folder / "raw").mkdir(parents=True, exist_ok=True)
         image.save(folder / "raw" / path.name)
@@ -159,10 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         _store(args.manifest, f"longctx-{args.backend}", fresh)
     ok = [e for e in fresh if e["status"] == "ok"]
     mean = fmean([e["seconds"] for e in ok] or [0.0])
-    peak = max((e["peak_vram_mb"] or 0 for e in ok), default=0)
-    emit(
-        f"{args.backend}: {len(ok)}/{len(fresh)} ok, {mean:.1f} s/image, peak {peak} MB"
-    )
+    emit(f"{args.backend}: {len(ok)}/{len(fresh)} ok, {mean:.1f} s/image")
     return 0 if len(ok) == len(fresh) else 1
 
 

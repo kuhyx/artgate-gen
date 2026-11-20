@@ -16,23 +16,21 @@ module does not either.
 from __future__ import annotations
 
 import contextlib
-import os
-import shutil
-import subprocess
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from huggingface_hub import hf_hub_download
-from PIL import Image
 
 from artgate_gen import prompt_budget
 from artgate_gen._types import Pipeline
+from artgate_gen.sd_cli import find_sd_cli, run_sd_cli
 from artgate_gen.targets import ICON_NEGATIVE, ICON_STYLE
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from PIL import Image
 
     from artgate_gen.profiling import RunProfile
     from artgate_gen.targets import Target
@@ -52,11 +50,6 @@ LORA_TAG = f"<lora:{Path(LORA_WEIGHTS).stem}:1>"
 VAE = "madebyollin/sdxl-vae-fp16-fix"
 VAE_WEIGHTS = "diffusion_pytorch_model.safetensors"
 
-# The binary is found on PATH by this name unless the env var names a path.
-# The override is the test seam: the suite points it at a fake binary.
-SD_CLI = "sd-cli"
-SD_CLI_ENV = "ARTGATE_SD_CLI"
-
 # Re-exported from `targets`, which owns them alongside the backdrop variants.
 # Kept as module-level names here because callers already import them.
 STYLE = ICON_STYLE
@@ -72,37 +65,6 @@ SAMPLER = "euler"
 # and 300 genuine 48x48 icons top out at 14. Hand-made art does not spend more
 # colours on a bigger canvas, so this cap does NOT scale with `size`.
 MAX_COLOURS = 32
-
-# How much of sd-cli's log to quote when a render fails.
-LOG_TAIL_LINES = 15
-
-
-class SdCliMissingError(FileNotFoundError):
-    """The ``sd-cli`` binary is not installed or not where it was pointed."""
-
-
-class SdCliError(RuntimeError):
-    """``sd-cli`` ran but did not produce the requested image."""
-
-
-def find_sd_cli() -> str:
-    """Return the path of the ``sd-cli`` binary.
-
-    Returns:
-        An executable path.
-
-    Raises:
-        SdCliMissingError: When it cannot be found, naming the setup command.
-    """
-    wanted = os.environ.get(SD_CLI_ENV) or SD_CLI
-    found = shutil.which(wanted)
-    if found is None:
-        message = (
-            f"stable-diffusion.cpp binary {wanted!r} not found; "
-            "install it with ./run.sh --setup-only"
-        )
-        raise SdCliMissingError(message)
-    return found
 
 
 def resolve(repo: str, filename: str) -> Path:
@@ -199,9 +161,6 @@ def token_count(pipe: Pipeline, text: str) -> int:
 def generate(pipe: Pipeline, prompt: str, seed: int, target: Target) -> Image.Image:
     """Render one candidate for ``prompt`` at ``target``'s render size.
 
-    sd-cli's log is captured, never inherited: the MCP server speaks over
-    stdio, and a render's log lines on stdout would corrupt the protocol.
-
     Args:
         pipe: The resolved render inputs.
         prompt: The subject, appended to the target's style stem.
@@ -210,29 +169,7 @@ def generate(pipe: Pipeline, prompt: str, seed: int, target: Target) -> Image.Im
 
     Returns:
         One render at ``target.render``.
-
-    Raises:
-        SdCliError: When sd-cli fails, writes nothing, or writes the wrong size.
     """
-    with tempfile.TemporaryDirectory(prefix="artgate-sd-") as scratch:
-        out = Path(scratch) / "render.png"
-        done = subprocess.run(
-            build_argv(pipe, prompt, seed, target, out),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        log = "\n".join((done.stdout + done.stderr).splitlines()[-LOG_TAIL_LINES:])
-        if done.returncode != 0:
-            message = f"sd-cli exited {done.returncode}:\n{log}"
-            raise SdCliError(message)
-        if not out.is_file():
-            message = f"sd-cli exited 0 but wrote no image:\n{log}"
-            raise SdCliError(message)
-        with Image.open(out) as image:
-            image.load()
-            render = image.convert("RGB")
-    if render.size != target.render:
-        message = f"sd-cli rendered {render.size}, expected {target.render}"
-        raise SdCliError(message)
-    return render
+    return run_sd_cli(
+        lambda out: build_argv(pipe, prompt, seed, target, out), target.render
+    )

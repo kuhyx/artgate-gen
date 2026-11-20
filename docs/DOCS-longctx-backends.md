@@ -20,7 +20,14 @@ on a 92-token portrait prompt: the positive prompt ran two condition passes
 
 The research below predates that move and was done against diffusers. The
 Flux/SD3 findings still describe the models; running them would now mean
-stable-diffusion.cpp, which supports both.
+stable-diffusion.cpp, which supports both. `--backend sd35` does that.
+
+**sd.cpp chunks T5 too.** Its SD3 conditioner (`SD3CLIPEmbedder` in
+`src/conditioning/conditioner.hpp`, read 2026-11-20) encodes CLIP-L, CLIP-G
+*and* T5 in separate 77-token windows. So on sd.cpp, SD3.5 does not get the
+single 512-token T5 window that diffusers' `max_sequence_length=512` gave. Long
+prompts are still not truncated, but token strength past the first window is
+not uniform either. Any long-context verdict measured on sd.cpp must say so.
 
 **But chunking is a workaround, not a raised limit.** A token attends only
 within its own window, so text past the first ~77 influences the render less
