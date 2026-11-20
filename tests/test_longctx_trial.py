@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from artgate_gen import sd35
+from artgate_gen import pipeline, sd35
 from tests.assertions import check, check_equal
 from tools import longctx_trial
 
@@ -114,6 +114,19 @@ def test_every_subject_is_rendered_and_recorded(manifest: Path) -> None:
         check(condition=entry["prompt"].startswith("pixel art"), message="trigger")
         check(condition="peak_vram_mb" in entry, message="peak VRAM recorded")
         check(condition=entry["seconds"] >= 0, message="seconds recorded")
+        check(condition=(manifest.parent / entry["file"]).exists(), message="file")
+
+
+def test_the_sdxl_backend_runs_the_same_trial(manifest: Path) -> None:
+    """The sd.cpp SDXL backend fills the same fields under its own category."""
+    check_equal(actual=_run(manifest, "--backend", "sdxl"), expected=0, message="ok")
+    entries = json.loads(manifest.read_text(encoding="utf-8"))
+    trial = [e for e in entries if e["category"] == "longctx-sdxl"]
+    check_equal(actual=len(trial), expected=4, message="every arm rendered")
+    for entry in trial:
+        check_equal(actual=entry["status"], expected="ok", message=entry["name"])
+        check_equal(actual=entry["model"], expected=pipeline.MODEL, message="model")
+        check(condition=entry["clip_tokens"] > 0, message="CLIP tokens counted")
         check(condition=(manifest.parent / entry["file"]).exists(), message="file")
 
 

@@ -1,8 +1,8 @@
-"""Test configuration: install the library stubs before anything imports them.
+"""Test configuration: library stubs plus a fake ``sd-cli`` on every test.
 
-This runs at module scope rather than in a fixture because pytest imports the
-rootdir conftest before any test module, and ``artgate_gen.pipeline`` imports
-torch at module scope. By the time a fixture ran it would already be too late.
+The stubs install at module scope rather than in a fixture because pytest
+imports the rootdir conftest before any test module, so a fixture would run
+after the first ``import huggingface_hub`` had already happened.
 
 The stubs are real packages under ``tests/stubs`` rather than hand-built
 ``ModuleType`` objects, so they are linted, type-checked and diffable like any
@@ -22,14 +22,17 @@ if TYPE_CHECKING:
 import pytest
 
 STUB_ROOT = Path(__file__).parent / "stubs"
+FAKE_SD_CLI = Path(__file__).parent / "fake_sd_cli.py"
 
 # Only the libraries the CI check job does not install. numpy and Pillow stay
 # real: the finisher and the gate do genuine array work, and faking them would
 # make the coverage meaningless.
 STUBBED = (
+    # torch and diffusers only back the opt-in SD3.5 backend (the `sd35`
+    # extra); the repo venv never installs them.
     "torch",
     "diffusers",
-    # A real submodule path, because the loader does
+    # A real submodule path, because sd35 does
     # `from diffusers.utils import logging`.
     "diffusers.utils",
     "transformers",
@@ -53,9 +56,32 @@ def _install_stubs() -> None:
 _install_stubs()
 
 
+@pytest.fixture(scope="session")
+def fake_sd_cli(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Write an executable wrapper that runs the fake binary.
+
+    A wrapper rather than a shebang on the fake itself, so the fake runs under
+    this interpreter (which has Pillow) and never under whatever ``python3``
+    is first on PATH.
+
+    Returns:
+        Path to the executable.
+    """
+    wrapper = tmp_path_factory.mktemp("bin") / "sd-cli"
+    wrapper.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{FAKE_SD_CLI}" "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    return wrapper
+
+
 @pytest.fixture(autouse=True)
-def _reset_stub_state() -> Iterator[None]:
-    """Clear mutable stub state between tests.
+def _reset_stub_state(
+    fake_sd_cli: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Point the pipeline at the fake binary and clear stub state.
 
     The stubs record calls and carry flags that steer their branches; leaking
     that between tests would make results depend on execution order.
@@ -64,10 +90,13 @@ def _reset_stub_state() -> Iterator[None]:
         Control to the test.
 
     """
+    # Imported here, not at module scope: the pipeline imports huggingface_hub,
+    # which must resolve to the stub installed above, not the real library.
+    pipeline = importlib.import_module("artgate_gen.pipeline")
+    monkeypatch.setenv(pipeline.SD_CLI_ENV, str(fake_sd_cli))
+    monkeypatch.delenv("FAKE_SD_MODE", raising=False)
+    monkeypatch.delenv("FAKE_SD_ARGV", raising=False)
     hub = sys.modules["huggingface_hub"]
-    torch = sys.modules["torch"]
     hub.reset()
-    torch.cuda.available = False
     yield
     hub.reset()
-    torch.cuda.available = False

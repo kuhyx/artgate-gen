@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from artgate_gen import backends, prompt_budget
+from artgate_gen import backends
 from artgate_gen.console import emit
 from artgate_gen.targets import TARGETS
 
@@ -114,7 +114,7 @@ def _render(
         "guidance": module.GUIDANCE,
         "t5_max_len": getattr(module, "T5_MAX_LEN", None),
         "offload": getattr(module, "OFFLOAD", False),
-        "clip_tokens": prompt_budget.token_count(pipe, prompt),
+        "clip_tokens": module.token_count(pipe, prompt),
     }
     torch.cuda.reset_peak_memory_stats()
     start = time.perf_counter()

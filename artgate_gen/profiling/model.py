@@ -31,8 +31,6 @@ class Sample:
     """One resource reading taken during the run."""
 
     at: float
-    gpu_alloc_mb: float
-    gpu_reserved_mb: float
     host_rss_mb: float
     load1: float
 

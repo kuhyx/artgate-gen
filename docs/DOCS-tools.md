@@ -18,9 +18,9 @@ Generate icons with SDXL plus the pixel-art LoRA, then gate them.
 
 Returns each icon's path, seed and gate verdict, plus a summary.
 
-**Batch your subjects.** This is the only tool that loads the model, and the
-model is not kept warm — one call with ten subjects pays the ~40 s load once,
-ten calls pay it ten times.
+**This is the only tool that renders.** Each render runs one `sd-cli`
+process (stable-diffusion.cpp, Vulkan) that loads the model, renders and
+exits: about 20 s per 1024px image on an RTX 3090.
 
 ## `gate_icon`
 

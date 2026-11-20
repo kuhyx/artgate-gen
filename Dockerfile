@@ -1,9 +1,9 @@
 # Base install only, deliberately: no `[generate]` extra.
 #
 # This image exists so an automated inspector can start the server and read its
-# tool list. Pulling the CUDA stack in would make the build multi-gigabyte and
-# slow, and a build that fails or times out costs both the quality score and
-# search visibility. `gate_icon` and `describe_icon` need no model, and
+# tool list. Pulling in the generation stack (the `sd-cli` binary plus ~7 GB of
+# SDXL weights) would make the build multi-gigabyte and slow, and a build that
+# fails or times out costs both the quality score and search visibility. `gate_icon` and `describe_icon` need no model, and
 # `generate_icons` reports the missing dependency rather than crashing the
 # server at import.
 FROM python:3.12-slim

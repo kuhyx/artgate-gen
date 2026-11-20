@@ -3,11 +3,10 @@
 Icon generation becomes a tool call rather than a shell command, and the gate
 verdict comes back with the art in one round trip.
 
-**VRAM policy.** The model is not kept warm. SDXL holds roughly 7 GB and the
-same GPU runs local LLM work, so the pipeline loads on first use and is dropped
-after an idle window. The first call after an unload pays the load again, which
-is why ``generate_icons`` takes a batch of subjects -- send them in one call
-rather than one call per icon.
+**VRAM policy.** Nothing stays on the GPU. Each render is one stable-diffusion.cpp
+``sd-cli`` process that loads SDXL (about 7 GB), renders and exits, because the
+same GPU runs local LLM work. What the server caches is only the resolved
+binary and weight paths, dropped after an idle window like before.
 
 **Adjudication stays deterministic.** The gate runs in-process here, but it is
 the same vendored implementation the CLI uses and it never judges whether art
@@ -122,9 +121,8 @@ def model_status() -> dict[str, Any]:
         "loaded": loaded,
         "idle_seconds": idle,
         "unloads_after_seconds": IDLE_UNLOAD_SECONDS,
-        "note": "Not kept warm on purpose -- SDXL holds ~7GB and the GPU is "
-        "shared with local LLM work. First call after an unload pays "
-        "a ~40s load, so batch subjects into one generate_icons call.",
+        "note": "Holds no VRAM: each render is its own sd-cli process that "
+        "loads SDXL (~7GB), renders in about 20s on an RTX 3090, and exits.",
     }
 
 

@@ -1,21 +1,12 @@
-# torch's +cu128 local version resolves from PyPI, but torchvision's does not,
-# so the PyTorch index is added as an EXTRA index -- `--index-url` would replace
-# PyPI outright and strand every pin below that PyTorch does not mirror.
---extra-index-url https://download.pytorch.org/whl/cu128
-
-torch==2.11.0+cu128
-# transformers falls back to a PIL image processor and warns on every run when
-# torchvision is absent; the version is the one paired with torch 2.11.0+cu128.
-torchvision==0.26.0+cu128
-diffusers==0.39.0
+# Rendering runs in stable-diffusion.cpp's `sd-cli` binary (Vulkan), which
+# run.sh installs from the AUR. Nothing here pulls in torch or CUDA wheels.
+#
+# CLIP tokenizer only, for prompt_budget.token_count; needs no torch.
 transformers==5.15.0
 # Pinned rather than left transitive: fetch.py's import path (huggingface_hub
 # 1.27.0 dropped disable_progress_bars from the top-level package) already
-# drifted once via diffusers/transformers' unpinned dependency range.
+# drifted once via an unpinned dependency range.
 huggingface_hub==1.27.0
-accelerate==1.14.0
-peft==0.20.0
-safetensors==0.8.0
 pillow==12.3.0
 numpy==2.5.2
 mcp==1.29.0

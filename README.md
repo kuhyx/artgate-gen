@@ -15,11 +15,17 @@ judges whether the art looks good. That judgement stays with you.
 
 ```bash
 pip install artgate-gen              # gate + describe tools, no GPU needed
-pip install "artgate-gen[generate]"  # adds SDXL generation (CUDA)
+pip install "artgate-gen[generate]"  # adds SDXL generation
 ```
 
 The base install is small on purpose, so the gate tools work anywhere. Only
 `generate_icons` needs the model.
+
+Rendering runs in `sd-cli` from [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)
+(MIT) on its Vulkan backend. There is no torch and no CUDA wheel anywhere in
+the dependency tree. `./run.sh --setup-only` installs `sd-cli` from the AUR
+(`stable-diffusion.cpp-vulkan-bin`); elsewhere, install stable-diffusion.cpp
+with Vulkan and put `sd-cli` on `PATH`, or point `ARTGATE_SD_CLI` at it.
 
 ## Quickstart
 
@@ -50,9 +56,10 @@ See [docs/DOCS-tools.md](docs/DOCS-tools.md).
 downscale and fine detail — a coin's struck emblem, a shield's radial pattern —
 turns to mush. The same source survives at 64.
 
-**Batch your subjects into one call.** The model is not kept warm: SDXL holds
-about 7 GB and is dropped after ten idle minutes, so the first call after an
-unload pays a ~40 s load. One call with ten subjects costs that once.
+**Each render is its own `sd-cli` process.** It loads SDXL (about 7 GB of
+VRAM), renders, and frees the GPU on exit, so nothing stays resident between
+renders. On an RTX 3090 one 1024px render takes about 20 s including that
+load, which costs about 2 s when the weights are in the page cache.
 
 **For a set of one character — expressions, poses, variants — render one base
 image and inpaint the region that changes.** Do not re-run the whole prompt
@@ -63,8 +70,8 @@ and hair changed colour outright. Pinning identity in the prompt was tried
 extensively and did not hold. With a mask, every pixel outside it is copied
 from the base, so identity is invariant *by construction*.
 
-The loaded `lpw_stable_diffusion_xl` already exposes `inpaint`, `mask_image`
-and `strength`. Locate the mask from the image rather than a fixed box,
+`sd-cli` takes `-i`, `--mask` and `--strength` for this; this package does not
+wire them up yet. Locate the mask from the image rather than a fixed box,
 feather it (~12px at 1024; a hard edge seams once downscaled), keep anything
 that must not drift *outside* it, and repaint at strength ~0.9 — identity is
 protected by the mask, not by a timid strength. See

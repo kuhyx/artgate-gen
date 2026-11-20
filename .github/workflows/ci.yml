@@ -1,10 +1,10 @@
 name: ci
 
 # The check job is budgeted at under 60 seconds from job start. It holds that
-# budget by never installing the ML stack: torch and friends are 1.3 GB and
-# ~28 s even from a warm cache, and the tests supply them from tests/stubs
-# instead. Everything installed here is a small pure-Python wheel, so cold
-# runs fit too.
+# budget by never installing the `generate` extra or the sd-cli binary: the
+# tests supply huggingface_hub and transformers from tests/stubs and render
+# through tests/fake_sd_cli.py instead. Everything installed here is a small
+# pure-Python wheel, so cold runs fit too.
 
 on:
   push:

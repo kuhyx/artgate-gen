@@ -1,8 +1,8 @@
 """A minimal stand-in for :mod:`transformers`.
 
-Only the progress-bar control is touched: the pipeline loader silences the
-per-component "Loading weights" bars, which come from transformers rather than
-from diffusers.
+The CLIP tokenizer is touched by ``prompt_budget.token_count`` (the SDXL
+render itself runs in stable-diffusion.cpp, which tokenizes on its own), and
+the progress-bar control by the SD3.5 loader.
 """
 
 from __future__ import annotations
@@ -16,13 +16,51 @@ if TYPE_CHECKING:
 
 
 class _Logging:
-    """Stands in for ``transformers.logging``."""
+    """Stands in for ``transformers.logging``, which the SD3.5 loader silences."""
 
     def disable_progress_bar(self) -> None:
         """Silence progress bars; a no-op here."""
 
 
 logging = _Logging()
+
+# Every directory passed to `CLIPTokenizer.from_pretrained`, in call order.
+loads: list[str] = []
+
+
+class CLIPTokenizer:
+    """Stands in for the CLIP tokenizer.
+
+    Counts whitespace-delimited words plus the two sentinel markers real CLIP
+    adds. That is not how BPE works, and it does not need to be: the only
+    behaviour under test is that a longer prompt reports a larger number.
+    """
+
+    @classmethod
+    def from_pretrained(cls, source: str) -> CLIPTokenizer:
+        """Record the load and return a tokenizer.
+
+        Args:
+            source: The tokenizer directory.
+
+        Returns:
+            A new stub instance.
+
+        """
+        loads.append(source)
+        return cls()
+
+    def __call__(self, text: str) -> dict[str, list[int]]:
+        """Tokenize one string.
+
+        Args:
+            text: The prompt to measure.
+
+        Returns:
+            A mapping with an ``input_ids`` list, as transformers returns.
+
+        """
+        return {"input_ids": list(range(len(text.split()) + 2))}
 
 
 def __getattr__(name: str) -> Callable[..., None]:

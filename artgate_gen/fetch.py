@@ -1,11 +1,11 @@
 """Populate the local Hugging Face cache for the models this package uses.
 
 Two strategies, deliberately kept side by side. The thrifty fetch pulls only
-the files a load actually touches (~7 GB); the complete fetch mirrors whole
-repository snapshots (~77 GB) so that ``local_files_only`` loads work, because
-huggingface_hub rejects a *partial* snapshot outright when asked to stay
-offline. Which one you want depends on whether you care more about disk space
-or about never touching the network mid-run.
+the files a render actually touches (~7 GB); the complete fetch mirrors whole
+repository snapshots (~77 GB). Since the move to stable-diffusion.cpp the
+pipeline resolves each file on its own, local first, so the thrifty cache is
+already enough to render with no Hub round-trip; the complete fetch is kept
+for anyone who wants the full repositories on disk.
 """
 
 from __future__ import annotations
@@ -22,12 +22,12 @@ from huggingface_hub import snapshot_download
 from huggingface_hub.utils.tqdm import disable_progress_bars
 
 from artgate_gen.console import emit
-from artgate_gen.pipeline import LORA, MODEL, VAE
+from artgate_gen.pipeline import CHECKPOINT, LORA, MODEL, VAE
 
-# Only the fp16 weights are used (the pipeline loads with variant="fp16"), so
-# the fp32 duplicates are skipped -- they roughly double the download for
-# nothing.
-SDXL_ALLOW = ["*.json", "*.txt", "*fp16.safetensors", "*tokenizer*"]
+# stable-diffusion.cpp reads the single-file checkpoint (UNet plus both text
+# encoders in one fp16 file), so the diffusers component folders are skipped.
+# The tokenizer folder stays for `prompt_budget.token_count`.
+SDXL_ALLOW = [CHECKPOINT, "tokenizer/*"]
 
 # Patterns are PER REPO, deliberately. The VAE repo's weights are named
 # `diffusion_pytorch_model.safetensors`, which does NOT match

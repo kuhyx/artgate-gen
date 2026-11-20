@@ -23,7 +23,9 @@ Worth stating plainly, because this is a tool that writes files and shells out:
   autonomous agent.
 - **Model weights are downloaded from Hugging Face** on first use, from the
   three repositories named in `artgate_gen/pipeline.py`. They are executed as
-  model weights, not as code, but they are third-party artifacts.
+  model weights, not as code, but they are third-party artifacts. They are
+  read by the stable-diffusion.cpp `sd-cli` binary found on `PATH` (or named
+  by `ARTGATE_SD_CLI`), which runs with the server's own permissions.
 - **Prompts are passed to the model verbatim.** Nothing here filters what is
   generated; the deterministic gate measures canvas, palette, alpha, scale,
   contrast and margin, and makes no judgement about content.

@@ -47,9 +47,8 @@ def generate_icons(
         Field(
             description=(
                 "Map of icon name to a description of the object, e.g. "
-                '{"lantern": "a brass lantern with a lit wick"}. Batch every '
-                "subject into one call: the model is not kept warm, so a "
-                "second call may pay a ~40s reload."
+                '{"lantern": "a brass lantern with a lit wick"}. Each render '
+                "takes about 20s on an RTX 3090."
             ),
         ),
     ],

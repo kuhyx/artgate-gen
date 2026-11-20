@@ -1,7 +1,7 @@
 """Command-line entry point: render every requested subject, then finish it.
 
 Kept separate from the pipeline so that argument parsing can be tested without
-importing torch.
+the ``generate`` extra installed.
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def main() -> None:
     """Generate every requested subject at the requested size."""
     parser = build_parser()
     args = parser.parse_args()
-    # Deferred so `--help` and parsing work without torch installed.
+    # Deferred so `--help` and parsing work without the `generate` extra.
     pipeline = backends.load(args.backend)
 
     pairs = _parse_subjects(parser, args.subjects)

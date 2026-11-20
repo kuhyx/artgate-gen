@@ -1,9 +1,10 @@
 """Idle unloading of the diffusion pipeline.
 
-Unlike a dedicated render host, this server does not keep its model warm. SDXL
-holds roughly 7 GB and the same GPU runs local LLM work, so a permanently
-resident pipeline would squat on memory someone else needs. The pipeline loads
-on first use and is dropped after an idle window.
+Since rendering moved to stable-diffusion.cpp, the "pipeline" held here is only
+the resolved ``sd-cli`` binary and weight paths; the model itself lives in VRAM
+only while one ``sd-cli`` process renders. The record still loads on first use
+and is dropped after an idle window, so a cache change (a re-fetched model) is
+picked up without a server restart.
 
 The loop waits on an :class:`threading.Event` rather than sleeping, so a test
 can stop it deterministically and both branches are reachable without a

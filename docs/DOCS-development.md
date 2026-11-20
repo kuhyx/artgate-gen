@@ -10,8 +10,10 @@ venv/bin/pip install -e ".[dev]"
 pre-commit install && pre-commit install --hook-type pre-push
 ```
 
-Generation additionally needs `.[generate]` and a CUDA GPU. Everything else —
-the gate, the finisher, the CLI, the whole test suite — runs without either.
+Generation additionally needs `.[generate]`, the `sd-cli` binary from
+stable-diffusion.cpp (`./run.sh --setup-only` installs it) and a Vulkan GPU.
+Everything else — the gate, the finisher, the CLI, the whole test suite — runs
+without them.
 
 ## The gate
 
@@ -52,10 +54,14 @@ path and a Pillow 14 deprecation in `describe_icon`.
 
 ## Tests without a GPU
 
-`tests/stubs/` holds real stub packages for torch, diffusers, transformers and
-huggingface_hub, installed into `sys.modules` by `tests/conftest.py` before
-anything imports them. They are ordinary source: linted, type-checked and
-diffable.
+`tests/stubs/` holds real stub packages for transformers and huggingface_hub,
+installed into `sys.modules` by `tests/conftest.py` before anything imports
+them. They are ordinary source: linted, type-checked and diffable.
+
+Rendering is tested through a real subprocess: `tests/conftest.py` points
+`ARTGATE_SD_CLI` at a wrapper around `tests/fake_sd_cli.py`, which parses the
+same flags as `sd-cli`, writes a flat PNG at `-W` x `-H`, and can be told
+(`FAKE_SD_MODE`) to fail, write nothing, or write the wrong size.
 
 numpy and Pillow are **not** stubbed. The finisher and the gate do genuine
 array work, and faking that would make the coverage meaningless.

@@ -97,11 +97,10 @@ create_venv() {
 }
 
 install_deps() {
-    # torch is the expensive one; if it imports, everything else already did.
-    if "$PY" -c 'import torch, diffusers, mcp' 2>/dev/null; then
+    if "$PY" -c 'import huggingface_hub, transformers, mcp' 2>/dev/null; then
         return
     fi
-    log "Installing Python dependencies (this downloads several GB)"
+    log "Installing Python dependencies"
     VIRTUAL_ENV="$VENV" uv pip install -r "$SCRIPT_DIR/requirements.txt"
 }
 
@@ -146,18 +145,13 @@ repair_one() {
         --spec "$spec" --codes "$GATE_OUTPUT" 2>&1)"
 }
 
-validate_requirements() {
-    if ! "$PY" -c 'import torch; assert torch.cuda.is_available()' 2>/dev/null; then
-        echo "Warning: CUDA is not available; generation will be very slow." >&2
-    fi
-}
-
 main() {
     install_uv
+    # sd-cli (stable-diffusion.cpp, Vulkan) renders every image.
+    "$SCRIPT_DIR/scripts/install_sd_cpp.sh"
     create_venv
     install_deps
     fetch_model
-    validate_requirements
 
     if [[ $SETUP_ONLY -eq 1 ]]; then
         log "Setup complete. Run again with an output dir and subjects to generate."

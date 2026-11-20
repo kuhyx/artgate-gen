@@ -1,8 +1,9 @@
 """A minimal stand-in for :mod:`huggingface_hub`.
 
-``snapshot_download`` is the interesting one: the cache probes branch on
-whether it raises, so tests need to drive both outcomes. The module-level
-``missing`` set names the repos that should be treated as absent locally.
+``snapshot_download`` and ``hf_hub_download`` are the interesting ones: the
+cache probes and the local-first path resolution branch on whether they raise,
+so tests need to drive both outcomes. The module-level ``missing`` set names
+the repos that should be treated as absent locally.
 """
 
 from __future__ import annotations
@@ -84,6 +85,28 @@ def snapshot_download(repo_id: str, **kwargs: object) -> str:
         message = f"stub: {repo_id} is not cached locally"
         raise OSError(message)
     return f"/stub/cache/{repo_id}"
+
+
+def hf_hub_download(repo_id: str, filename: str, **kwargs: object) -> str:
+    """Pretend to resolve one file, locally or over the network.
+
+    Args:
+        repo_id: The repository being requested.
+        filename: The file within it.
+        **kwargs: Only ``local_files_only`` is read.
+
+    Returns:
+        A fake local path.
+
+    Raises:
+        OSError: For a local-only request when ``repo_id`` is in ``missing``.
+
+    """
+    calls.append(repo_id)
+    if kwargs.get("local_files_only") and repo_id in missing:
+        message = f"stub: {repo_id} is not cached locally"
+        raise OSError(message)
+    return f"/stub/cache/{repo_id}/{filename}"
 
 
 def reset() -> None:

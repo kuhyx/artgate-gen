@@ -11,9 +11,16 @@ happened: a portrait set shipped where 4 of 7 prompts overflowed and two
 expression clauses ("dead eyes", "staring") were never asked for at all. The
 images looked plausible; the only evidence was a warning line in a render log.
 
-That specific bug is fixed. `artgate_gen.pipeline.LONG_PROMPT_PIPELINE` loads
-the `lpw_stable_diffusion_xl` community pipeline, which encodes successive
-77-token windows and concatenates the embeddings, so nothing is dropped.
+That specific bug is fixed. Rendering now runs in stable-diffusion.cpp
+(`sd-cli`), which, like the `lpw_stable_diffusion_xl` community pipeline used
+before it, encodes successive 77-token windows and concatenates the
+embeddings, so nothing is dropped. Checked 2026-11-20 with `--log-level debug`
+on a 92-token portrait prompt: the positive prompt ran two condition passes
+(two windows), and `(red:1.3)` was parsed as weight 1.3.
+
+The research below predates that move and was done against diffusers. The
+Flux/SD3 findings still describe the models; running them would now mean
+stable-diffusion.cpp, which supports both.
 
 **But chunking is a workaround, not a raised limit.** A token attends only
 within its own window, so text past the first ~77 influences the render less

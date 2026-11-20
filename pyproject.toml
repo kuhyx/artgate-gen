@@ -18,19 +18,17 @@ classifiers = [
 ]
 # Base install stays small on purpose: `gate_icon` and `describe_icon` need no
 # model, so a reviewer (or Glama's build sandbox) can install and introspect the
-# server without pulling gigabytes of CUDA wheels. Generation lives in the
-# `generate` extra.
+# server without the model tooling. Generation lives in the `generate` extra.
+# Rendering itself runs in stable-diffusion.cpp's `sd-cli` binary (MIT, Vulkan),
+# which `run.sh --setup-only` installs; no torch, no CUDA wheels.
 dependencies = ["pillow>=11", "numpy>=2", "mcp>=1.12,<2"]
 
 [project.optional-dependencies]
 generate = [
-  "torch>=2.11",
-  "torchvision>=0.26",
-  "diffusers>=0.39",
+  # Resolves the checkpoint, VAE and LoRA in the HF cache for sd-cli.
+  "huggingface_hub>=1.27",
+  # CLIP tokenizer only, for prompt_budget.token_count. Needs no torch.
   "transformers>=5.15",
-  "accelerate>=1.14",
-  "peft>=0.20",
-  "safetensors>=0.8",
 ]
 dev = ["pytest>=8", "pytest-cov>=6", "ruff==0.15.2", "mypy>=1.14"]
 
@@ -95,34 +93,20 @@ strict = true
 warn_unreachable = true
 show_error_codes = true
 
-# The ML stack is deliberately absent from the CI check job: installing it is
-# 1.3 GB and ~28 s even warm, which alone would break the 60 s budget. Without
-# this, mypy would pass locally (where the venv has torch) and fail in CI --
-# the exact green-local/red-CI split the pinned ruff version exists to prevent.
+# The `generate` extra is deliberately absent from the CI check job, which
+# installs only `.[dev]`. Without this, mypy would pass locally (where the venv
+# has them) and fail in CI -- the exact green-local/red-CI split the pinned
+# ruff version exists to prevent.
 [[tool.mypy.overrides]]
-module = [
-  "torch.*",
-  "diffusers.*",
-  "transformers.*",
-  "huggingface_hub.*",
-  "peft.*",
-]
+module = ["transformers.*", "huggingface_hub.*", "torch.*", "diffusers.*"]
 ignore_missing_imports = true
 
-# torch ships `py.typed` but leaves parts of its own surface untyped (for
-# example `torch.backends.cudnn.version`), and diffusers' `from_pretrained` is
-# likewise untyped. Under `strict` those calls are errors even with the library
-# installed. Relaxed only for the two modules that touch the ML stack, so every
-# other module -- the gate, the finisher, the CLI, the server -- keeps the full
-# strict treatment including untyped-call detection.
+# torch and diffusers belong to the opt-in `sd35` extra only. diffusers'
+# `from_pretrained` and parts of torch are untyped, so untyped calls are allowed
+# in the modules that drive SD3.5 -- every other module keeps full strict mode.
 [[tool.mypy.overrides]]
 module = [
-  "artgate_gen.pipeline",
   "artgate_gen.sd35",
-  "artgate_gen.profiling.run",
-  # Exercises the same untyped library surface against the stubs.
-  "tests.test_types",
-  "tests.test_pipeline",
   "tests.test_sd35",
 ]
 disallow_untyped_calls = false

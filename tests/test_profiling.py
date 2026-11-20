@@ -8,7 +8,6 @@ deliberately as their happy paths.
 from __future__ import annotations
 
 import json
-import sys
 import time
 from typing import TYPE_CHECKING
 
@@ -31,13 +30,7 @@ def test_phase_carries_its_detail() -> None:
 
 def test_sample_is_a_plain_record() -> None:
     """A sample holds one reading of each resource."""
-    sample = Sample(
-        at=1.0,
-        gpu_alloc_mb=2.0,
-        gpu_reserved_mb=3.0,
-        host_rss_mb=4.0,
-        load1=5.0,
-    )
+    sample = Sample(at=1.0, host_rss_mb=4.0, load1=5.0)
     check_equal(actual=sample.host_rss_mb, expected=4.0, message="rss")
 
 
@@ -104,22 +97,22 @@ def test_report_lists_phases_with_shares() -> None:
     check(condition="beta" in report, message="the second phase appears")
 
 
-def test_report_includes_the_environment() -> None:
-    """The report names the library versions the run used."""
+def test_report_names_the_binary_that_rendered(fake_sd_cli: Path) -> None:
+    """The report says which sd-cli the run used."""
     with RunProfile(interval=0.01) as profile:
         pass
-    check(condition="torch" in profile.report(), message="torch version is reported")
+    check(condition=str(fake_sd_cli) in profile.report(), message="binary path")
 
 
-def test_report_includes_device_details_when_cuda_is_available() -> None:
-    """With a GPU present the report names the device."""
-    torch = sys.modules["torch"]
-    torch.cuda.available = True
-    with RunProfile(interval=0.01) as profile, profile.phase("work"):
+def test_report_flags_a_missing_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A missing sd-cli is reported, not raised: profiling never fails a run."""
+    monkeypatch.setenv("ARTGATE_SD_CLI", str(tmp_path / "absent"))
+    with RunProfile(interval=0.01) as profile:
         pass
-    report = profile.report()
-    torch.cuda.available = False
-    check(condition="StubGPU" in report, message="the device is named")
+    check(condition="not found" in profile.report(), message="missing binary")
 
 
 def test_write_json_round_trips(tmp_path: Path) -> None:
@@ -141,7 +134,7 @@ def test_peaks_are_reported() -> None:
     """The peak accessors return numbers even with no samples taken."""
     with RunProfile(interval=0.01) as profile:
         pass
-    check(condition=profile.peak_gpu_mb() >= 0, message="gpu peak")
+    check(condition=profile.peak_child_rss_mb() >= 0, message="child rss peak")
     check(condition=profile.peak_rss_mb() >= 0, message="rss peak")
     check(condition=profile.peak_load() >= 0, message="load peak")
 
@@ -159,29 +152,6 @@ def test_sampler_records_readings_while_the_run_is_open() -> None:
             time.sleep(0.005)
     check(condition=len(profile.samples) > 0, message="the sampler took a reading")
     check(condition=profile.samples[0].at >= 0.0, message="the reading is timestamped")
-
-
-def test_sampler_records_gpu_readings_when_cuda_is_available() -> None:
-    """With a GPU present the sampler reads allocation and reservation."""
-    torch = sys.modules["torch"]
-    torch.cuda.available = True
-    torch.cuda.allocated = 4 * 1024**2
-    torch.cuda.reserved = 8 * 1024**2
-    profile = RunProfile(interval=0.001)
-    try:
-        with profile:
-            deadline = time.time() + 0.5
-            while not profile.samples and time.time() < deadline:
-                time.sleep(0.005)
-    finally:
-        torch.cuda.available = False
-        torch.cuda.allocated = 0
-        torch.cuda.reserved = 0
-    check(condition=len(profile.samples) > 0, message="the sampler took a reading")
-    check(
-        condition=profile.peak_gpu_mb() > 0.0,
-        message="the GPU reservation was recorded",
-    )
 
 
 def test_exit_without_enter_is_safe() -> None:

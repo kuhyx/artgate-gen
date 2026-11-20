@@ -1,20 +1,24 @@
 """The profile collector: phase timing plus a background resource sampler.
 
 Sampling runs on its own thread rather than snapshotting around each phase,
-because peak GPU memory and peak CPU load happen *inside* a phase and
-start/end readings miss them entirely. The thread is a daemon and every probe
-is best-effort: observability must never be the reason a generation fails.
+because peak CPU load happens *inside* a phase and start/end readings miss it
+entirely. The thread is a daemon and every probe is best-effort: observability
+must never be the reason a generation fails.
+
+Rendering happens in a separate ``sd-cli`` process, so GPU memory is not
+visible from here; ``sd-cli`` logs its own VRAM use. The report gives the peak
+RSS of finished child processes instead, which is the render's host memory.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import resource
+import shutil
 import threading
 import time
 from typing import TYPE_CHECKING, Self
-
-import torch
 
 from artgate_gen.profiling.model import Phase, Sample, _host_rss_mb, _load1
 
@@ -58,16 +62,9 @@ class RunProfile:
     def _sample_loop(self) -> None:
         """Record a resource sample every ``interval`` seconds until stopped."""
         while not self._stop.wait(self.interval):
-            cuda = torch.cuda.is_available()
             self.samples.append(
                 Sample(
                     at=time.time() - self.started,
-                    gpu_alloc_mb=(
-                        torch.cuda.memory_allocated() / 1024**2 if cuda else 0.0
-                    ),
-                    gpu_reserved_mb=(
-                        torch.cuda.memory_reserved() / 1024**2 if cuda else 0.0
-                    ),
                     host_rss_mb=_host_rss_mb(),
                     load1=_load1(),
                 )
@@ -88,16 +85,12 @@ class RunProfile:
             self.start = 0.0
 
         def __enter__(self) -> RunProfile._Span:
-            # Pending GPU work would otherwise be attributed to whichever phase
-            # happens to synchronise next, which is exactly backwards.
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
+            # No GPU sync needed: sd-cli has exited, and its work with it, by
+            # the time a render call returns.
             self.start = time.time()
             return self
 
         def __exit__(self, *exc: object) -> None:
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
             self.profile.phases.append(
                 Phase(self.name, time.time() - self.start, self.detail)
             )
@@ -114,9 +107,10 @@ class RunProfile:
         """
         return self._Span(self, name, detail)
 
-    def peak_gpu_mb(self) -> float:
-        """Return peak reserved GPU memory across the run, in MiB."""
-        return max((s.gpu_reserved_mb for s in self.samples), default=0.0)
+    @staticmethod
+    def peak_child_rss_mb() -> float:
+        """Return the peak RSS of any finished child process, in MiB."""
+        return resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024
 
     def peak_rss_mb(self) -> float:
         """Return peak host RSS across the run, in MiB."""
@@ -130,20 +124,15 @@ class RunProfile:
         """Describe the machine and library versions the run used.
 
         Included because a timing number is meaningless without it: the same
-        phases on a different GPU, driver or torch build are a different
+        phases on a different GPU, driver or sd.cpp build are a different
         measurement, and "it got slower" is unanswerable without knowing whether
-        any of these moved.
+        any of these moved. The device itself is named in sd-cli's own log.
         """
-        cudnn = torch.backends.cudnn.version()
-        lines = [
-            f"  torch {torch.__version__} | cuda {torch.version.cuda} | cudnn {cudnn}"
-        ]
-        if torch.cuda.is_available():
-            props = torch.cuda.get_device_properties(0)
-            lines.append(
-                f"  device {props.name} | {props.total_memory / 1024**3:.1f} GiB"
-                f" | sm_{props.major}{props.minor} | {props.multi_processor_count} SMs"
-            )
+        # Same seam as `pipeline.SD_CLI_ENV`, spelled out rather than imported:
+        # the pipeline imports huggingface_hub, and the CLI imports this module
+        # in the base install, which does not have it.
+        binary = os.environ.get("ARTGATE_SD_CLI") or "sd-cli"
+        lines = [f"  sd-cli {shutil.which(binary) or 'not found'}"]
         lines.append(f"  host {os.cpu_count()} cpus | {_host_rss_mb():.0f} MiB rss now")
         return lines
 
@@ -165,11 +154,7 @@ class RunProfile:
                 f"{bar}{extra}"
             )
         lines.append(f"  {'TOTAL':<{width}} {total:7.2f}s")
-        if torch.cuda.is_available():
-            lines.append(
-                f"  peak GPU {self.peak_gpu_mb():.0f} MiB reserved"
-                f" | device {torch.cuda.get_device_name(0)}"
-            )
+        lines.append(f"  peak sd-cli RSS {self.peak_child_rss_mb():.0f} MiB")
         lines.append(
             f"  peak host RSS {self.peak_rss_mb():.0f} MiB"
             f" | peak load1 {self.peak_load():.2f}"
@@ -191,15 +176,13 @@ class RunProfile:
                 {"name": p.name, "seconds": p.seconds, **p.detail} for p in self.phases
             ],
             "peak": {
-                "gpu_reserved_mb": self.peak_gpu_mb(),
+                "child_rss_mb": self.peak_child_rss_mb(),
                 "host_rss_mb": self.peak_rss_mb(),
                 "load1": self.peak_load(),
             },
             "samples": [
                 {
                     "at": s.at,
-                    "gpu_alloc_mb": s.gpu_alloc_mb,
-                    "gpu_reserved_mb": s.gpu_reserved_mb,
                     "host_rss_mb": s.host_rss_mb,
                     "load1": s.load1,
                 }

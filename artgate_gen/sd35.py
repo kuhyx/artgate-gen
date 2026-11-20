@@ -12,11 +12,10 @@ from huggingface_hub import snapshot_download
 from transformers import logging as transformers_logging
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
     from PIL import Image
 
-    from artgate_gen._types import InferenceResult
     from artgate_gen.profiling import RunProfile
     from artgate_gen.targets import Target
 
@@ -49,6 +48,12 @@ ALLOW_PATTERNS = (
 
 class NotCachedError(RuntimeError):
     """The SD3.5 weights are not on disk; loading never downloads them."""
+
+
+class InferenceResult(Protocol):
+    """The subset of a diffusers pipeline result this module reads."""
+
+    images: Sequence[Image.Image]
 
 
 class Sd35Pipeline(Protocol):
@@ -110,6 +115,11 @@ def full_prompt(prompt: str, target: Target) -> str:
     """Join ``target``'s stem and ``prompt`` with the trigger leading once."""
     text = f"{target.style}, {prompt}"
     return text if text.startswith(TRIGGER) else f"{TRIGGER}, {text}"
+
+
+def token_count(pipe: Sd35Pipeline, text: str) -> int:
+    """Return how many CLIP tokens ``text`` costs on the first text encoder."""
+    return len(pipe.tokenizer(text)["input_ids"])
 
 
 def generate(pipe: Sd35Pipeline, prompt: str, seed: int, target: Target) -> Image.Image:
