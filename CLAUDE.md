@@ -6,4 +6,4 @@
 - lint: `venv/bin/ruff check .`
 - coverage: `venv/bin/python -m pytest -q --cov-report=xml`
 - coverage-gaps: `coverage-gaps coverage.xml`
-- deploy: `git -C ~/src/artgate-gen pull --ff-only && cd ~/src/artgate-gen && venv/bin/python -c 'import artgate_gen.server, artgate_gen.sd35' && ./run.sh --help | grep -q sd35`
+- deploy: `git -C ~/src/artgate-gen pull --ff-only && test "$(git -C ~/src/artgate-gen rev-parse HEAD)" = "$(git -C ~/src/artgate-gen rev-parse origin/main)" && cd ~/src/artgate-gen && venv/bin/python -c 'import artgate_gen.server, artgate_gen.sd35, artgate_gen.sd_cli' && ./run.sh --help | grep -q sd35`
