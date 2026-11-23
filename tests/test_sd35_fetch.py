@@ -117,6 +117,19 @@ def test_download_converts_the_model_and_t5_to_q8_0(
     )
 
 
+def test_the_conversion_runs_with_mangohud_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A session-wide ``MANGOHUD=1`` never loads the overlay layer into sd-cli."""
+    _drop_quantised()
+    monkeypatch.setenv("MANGOHUD", "1")
+    record = tmp_path / "env.json"
+    monkeypatch.setenv("FAKE_SD_ENV", str(record))
+    sd35_fetch.main(["--download"])
+    seen = json.loads(record.read_text(encoding="utf-8"))
+    check_equal(actual=seen, expected="1", message="DISABLE_MANGOHUD")
+
+
 def test_download_keeps_existing_quantised_copies(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

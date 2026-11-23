@@ -25,7 +25,7 @@ from artgate_gen.sd35 import (
     QUANTISED,
     quant_path,
 )
-from artgate_gen.sd_cli import LOG_TAIL_LINES, SdCliError, find_sd_cli
+from artgate_gen.sd_cli import LOG_TAIL_LINES, SdCliError, find_sd_cli, sd_cli_env
 
 GB = 1e9
 
@@ -87,6 +87,7 @@ def convert(source: Path, target: Path) -> None:
             *(find_sd_cli(), "-M", "convert", "-m", str(source)),
             *("--type", QUANT, "-o", str(partial)),
         ],
+        env=sd_cli_env(),
         capture_output=True,
         text=True,
         check=False,

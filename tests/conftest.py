@@ -92,6 +92,9 @@ def _reset_stub_state(
     monkeypatch.setenv(sd_cli.SD_CLI_ENV, str(fake_sd_cli))
     monkeypatch.delenv("FAKE_SD_MODE", raising=False)
     monkeypatch.delenv("FAKE_SD_ARGV", raising=False)
+    monkeypatch.delenv("FAKE_SD_ENV", raising=False)
+    # No real systemd scopes from the suite; the scope tests opt back in.
+    monkeypatch.setenv(sd_cli.SCOPE_ENV, "0")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
     sd35 = importlib.import_module("artgate_gen.sd35")
     for filename in sd35.QUANTISED:

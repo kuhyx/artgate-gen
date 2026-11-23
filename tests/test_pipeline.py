@@ -9,6 +9,7 @@ the model itself is fake.
 from __future__ import annotations
 
 import json
+import signal
 import sys
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -164,6 +165,19 @@ def test_generate_passes_the_benchmarked_settings(
     )
 
 
+def test_the_render_runs_with_mangohud_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A session-wide ``MANGOHUD=1`` never loads the overlay layer into sd-cli."""
+    monkeypatch.setenv("MANGOHUD", "1")
+    record = tmp_path / "env.json"
+    monkeypatch.setenv("FAKE_SD_ENV", str(record))
+    _icon(pipeline.load_pipeline())
+    seen = json.loads(record.read_text(encoding="utf-8"))
+    check_equal(actual=seen, expected="1", message="DISABLE_MANGOHUD")
+
+
 def test_prompt_weighting_reaches_the_binary_verbatim(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -185,6 +199,8 @@ def test_prompt_weighting_reaches_the_binary_verbatim(
         ("fail", "failed to allocate Vulkan buffer"),
         ("no-output", "no image"),
         ("wrong-size", "expected"),
+        ("fail-after-save", "exited 1"),
+        ("abort", f"exited {-signal.SIGABRT}"),
     ],
 )
 def test_a_bad_render_raises_with_the_reason(
