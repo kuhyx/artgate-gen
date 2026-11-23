@@ -109,6 +109,12 @@ install_deps() {
 }
 
 fetch_model() {
+    # SD3.5's gated weights come only from `python -m artgate_gen.sd35_fetch
+    # --download`, and its loader names any missing file; pulling SDXL here
+    # would download gigabytes the sd35 render never reads.
+    if [[ "$BACKEND" == "sd35" ]]; then
+        return
+    fi
     # fetch_cli prints its own one-line cache status, so no log line here.
     "$PY" -m artgate_gen.fetch_cli
 }
