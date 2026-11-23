@@ -76,5 +76,5 @@ def test_sd35_without_cached_weights_is_a_usage_error_naming_the_fetch(
         main()
     stderr = capsys.readouterr().err
     check(condition="artgate_gen.sd35_fetch" in stderr, message=stderr)
-    check(condition=sd35.CHECKPOINT in stderr, message=stderr)
+    check(condition=sd35.CLIP_L in stderr, message=stderr)
     check(condition=not (tmp_path / "axe.png").exists(), message="nothing rendered")

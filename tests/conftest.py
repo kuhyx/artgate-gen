@@ -73,11 +73,14 @@ def fake_sd_cli(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def _reset_stub_state(
     fake_sd_cli: Path,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> Iterator[None]:
     """Point the pipeline at the fake binary and clear stub state.
 
     The stubs record calls and carry flags that steer their branches; leaking
-    that between tests would make results depend on execution order.
+    that between tests would make results depend on execution order. The
+    SD3.5 q8_0 copies live in a per-test cache dir, made up front as
+    ``sd35_fetch --download`` would, so ``sd35.load_pipeline`` resolves.
 
     Yields:
         Control to the test.
@@ -89,6 +92,12 @@ def _reset_stub_state(
     monkeypatch.setenv(sd_cli.SD_CLI_ENV, str(fake_sd_cli))
     monkeypatch.delenv("FAKE_SD_MODE", raising=False)
     monkeypatch.delenv("FAKE_SD_ARGV", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+    sd35 = importlib.import_module("artgate_gen.sd35")
+    for filename in sd35.QUANTISED:
+        path = sd35.quant_path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"GGUF")
     hub = sys.modules["huggingface_hub"]
     hub.reset()
     yield

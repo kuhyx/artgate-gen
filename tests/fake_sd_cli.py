@@ -52,6 +52,10 @@ def main(argv: list[str]) -> int:
         return 1
     if mode == "no-output":
         return 0
+    if "-M" in argv:
+        # `-M convert`: the quantised copy only has to exist.
+        Path(_flag(argv, "-o")).write_bytes(b"GGUF")
+        return 0
     width, height = int(_flag(argv, "-W")), int(_flag(argv, "-H"))
     if mode == "wrong-size":
         width //= 2

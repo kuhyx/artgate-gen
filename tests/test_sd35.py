@@ -2,8 +2,9 @@
 
 What is under test is this module's own contract: it never downloads (the
 weights sit behind a licence only kuhy can accept), it hands ``sd-cli`` the
-single-file model plus all three text encoders, it offloads to fit a 24 GB
-card, and the LoRA trigger leads the prompt exactly once.
+q8_0 copies of the model and T5 plus the two CLIP encoders, all of which fit
+a 24 GB card with no offload, and the LoRA trigger leads the prompt exactly
+once.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,8 +23,6 @@ from artgate_gen.targets import TARGETS
 from tests.assertions import check, check_equal
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from artgate_gen.targets import Target
 
 SEED = 5
@@ -74,17 +74,25 @@ def test_argv_names_the_model_and_all_three_text_encoders(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """The single-file model carries the VAE; the encoders come separately."""
+    """The model (VAE inside) and T5 are q8_0 copies; CLIP stays as fetched."""
     argv = _render_argv(monkeypatch, tmp_path)
-    for flag, name in (
-        ("-m", sd35.CHECKPOINT),
-        ("--clip_l", sd35.CLIP_L),
-        ("--clip_g", sd35.CLIP_G),
-        ("--t5xxl", sd35.T5XXL),
-    ):
+    for flag, name in (("--clip_l", sd35.CLIP_L), ("--clip_g", sd35.CLIP_G)):
         check(condition=_flag(argv, flag).endswith(name), message=flag)
+    quantised = (("-m", "sd3.5_large_q8_0.gguf"), ("--t5xxl", "t5xxl_fp16_q8_0.gguf"))
+    for flag, name in quantised:
+        check_equal(
+            actual=_flag(argv, flag),
+            expected=str(tmp_path / "xdg-cache" / "artgate-gen" / "sd35" / name),
+            message=flag,
+        )
     check(condition="--vae" not in argv, message="the VAE is inside the model")
-    check(condition="--offload-to-cpu" in argv, message="fits a 24 GB card")
+    # Offload moved 26 GB through a 10 GiB-capped box and swapped for an hour.
+    check(condition="--offload-to-cpu" not in argv, message="all in VRAM")
+    check_equal(
+        actual=_flag(argv, "--flash-attn"),
+        expected="off,diffusion=on",
+        message="flash attention on the diffusion model only",
+    )
 
 
 def test_argv_applies_the_lora_with_the_card_settings(
@@ -105,7 +113,7 @@ def test_argv_applies_the_lora_with_the_card_settings(
         condition=_flag(argv, "--lora-model-dir").endswith(sd35.LORA),
         message="the LoRA dir",
     )
-    check_equal(actual=_flag(argv, "--steps"), expected="28", message="steps")
+    check_equal(actual=_flag(argv, "--steps"), expected="12", message="steps")
     check_equal(actual=_flag(argv, "--cfg-scale"), expected="3.5", message="cfg")
     check_equal(
         actual=_flag(argv, "--sampling-method"), expected="euler", message="sampler"
@@ -165,8 +173,28 @@ def test_load_refuses_uncached_weights_and_names_the_fetch(
     sys.modules["huggingface_hub"].missing.add(sd35.MODEL)
     with pytest.raises(sd35.NotCachedError, match="sd35_fetch") as caught:
         sd35.load_pipeline()
-    check(condition=sd35.CHECKPOINT in str(caught.value), message=str(caught.value))
+    check(condition=sd35.CLIP_L in str(caught.value), message=str(caught.value))
     check_equal(actual=set(local_only), expected={True}, message="no download started")
+
+
+def test_load_refuses_missing_quantised_copies_and_names_the_fetch() -> None:
+    """Cached safetensors without their q8_0 copies still stop the render."""
+    sd35.quant_path(sd35.T5XXL).unlink()
+    with pytest.raises(sd35.NotCachedError, match="sd35_fetch --download") as caught:
+        sd35.load_pipeline()
+    message = str(caught.value)
+    check(condition="t5xxl_fp16_q8_0.gguf" in message, message=message)
+    check(condition="sd3.5_large_q8_0" not in message, message=message)
+
+
+def test_quant_dir_defaults_under_home_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without XDG_CACHE_HOME the copies sit in ~/.cache, not the HF cache."""
+    monkeypatch.delenv("XDG_CACHE_HOME")
+    check_equal(
+        actual=sd35.quant_dir(),
+        expected=Path.home() / ".cache" / "artgate-gen" / "sd35",
+        message="default cache dir",
+    )
 
 
 def test_load_times_the_resolution_when_profiled() -> None:

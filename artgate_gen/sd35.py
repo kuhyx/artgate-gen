@@ -7,7 +7,14 @@ sd.cpp reads the ComfyUI-style single files from the gated SD3.5 repo: the
 model (which carries the VAE) plus the CLIP-L, CLIP-G and T5-XXL encoders. The
 SD3.5 licence must be accepted on Hugging Face before they can be fetched, so
 loading never downloads: ``python -m artgate_gen.sd35_fetch --download`` is
-the only way in.
+the only way in. That command also writes q8_0 GGUF copies of the model and
+T5 (``sd-cli -M convert``, about 20 s), which are what renders load.
+
+Why q8_0, measured on the 3090 (2026-11-23): fp16 weights with
+``--offload-to-cpu`` swapped for an hour and rendered nothing, and fp16 T5 on
+the CPU needs 10 GB of RAM. The q8_0 copies take 15 GB of VRAM, nothing in
+RAM, and run at the same speed per step as fp16. Converting at load time
+(``--type q8_0``) costs about 10 s per render; converting once does not.
 
 sd.cpp encodes the T5 prompt in separate 77-token windows, as it does CLIP, so
 it does not give the single 512-token T5 window diffusers' ``max_sequence_length``
@@ -17,6 +24,7 @@ did. Long prompts are split, not truncated.
 from __future__ import annotations
 
 import contextlib
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,12 +58,15 @@ LORA_SCALE = 1.0
 # NAME up in --lora-model-dir.
 LORA_TAG = f"<lora:{Path(LORA_WEIGHTS).stem}:{LORA_SCALE:g}>"
 TRIGGER = "pixel art"
-STEPS = 28
+# 28 steps take ~85 s at 1024² on the 3090 under Vulkan (~3 s/step); 12 fit
+# a one-minute render and drew a clean flask where 6 left a pink haze.
+STEPS = 12
 GUIDANCE = 3.5
 SAMPLER = "euler"
-# The fp16 model and T5 together exceed a 24 GB card; sd.cpp keeps weights in
-# RAM and moves each stage into VRAM when it runs.
-OFFLOAD = True
+FLASH_ATTN = "off,diffusion=on"
+QUANT = "q8_0"
+# The files sd35_fetch converts to QUANT; renders load the copies.
+QUANTISED = (CHECKPOINT, T5XXL)
 # What `sd35_fetch` downloads: exactly the files above, not the diffusers
 # folders or the fp8 T5 that share the repo.
 ALLOW_PATTERNS = (CHECKPOINT, CLIP_L, CLIP_G, T5XXL, "tokenizer/*")
@@ -65,16 +76,27 @@ class NotCachedError(BackendUnavailableError):
     """The SD3.5 weights are not on disk; loading never downloads them."""
 
 
+def quant_dir() -> Path:
+    """Return where the q8_0 copies live: outside the HF cache, never shared."""
+    base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(base) / "artgate-gen" / "sd35"
+
+
+def quant_path(filename: str) -> Path:
+    """Return the q8_0 GGUF copy of the repo file ``filename``."""
+    return quant_dir() / f"{Path(filename).stem}_{QUANT}.gguf"
+
+
 @dataclass(frozen=True, slots=True)
 class Sd35Pipeline:
     """Everything ``sd-cli`` needs for an SD3.5 render besides the prompt.
 
     Attributes:
         binary: Path to the ``sd-cli`` executable.
-        model: The single-file SD3.5-Large model, VAE included.
+        model: The q8_0 copy of the SD3.5-Large model, VAE included.
         clip_l: The CLIP-L text encoder.
         clip_g: The CLIP-G text encoder.
-        t5xxl: The fp16 T5-XXL text encoder.
+        t5xxl: The q8_0 copy of the T5-XXL text encoder.
         lora_dir: Directory holding the pixel-art LoRA.
         tokenizer_dir: The CLIP tokenizer, for ``token_count``.
     """
@@ -135,16 +157,25 @@ def load_pipeline(profile: RunProfile | None = None) -> Sd35Pipeline:
 
     Returns:
         The resolved render inputs.
+
+    Raises:
+        NotCachedError: When the q8_0 copies have not been made.
     """
     span = profile.phase if profile is not None else _null_span
     with span("load:resolve"):
         binary = find_sd_cli()
-        model, clip_l, clip_g, t5xxl, vocab, lora = _cached(
-            [
-                *((MODEL, f) for f in (CHECKPOINT, CLIP_L, CLIP_G, T5XXL, TOKENIZER)),
-                (LORA, LORA_WEIGHTS),
-            ]
+        clip_l, clip_g, vocab, lora = _cached(
+            [*((MODEL, f) for f in (CLIP_L, CLIP_G, TOKENIZER)), (LORA, LORA_WEIGHTS)]
         )
+        # Only the copies are read, so the fp16 sources may be deleted later.
+        model, t5xxl = (quant_path(f) for f in QUANTISED)
+        missing = [path.name for path in (model, t5xxl) if not path.is_file()]
+        if missing:
+            message = (
+                f"no {QUANT} copy: {', '.join(missing)} in {quant_dir()}. Run "
+                "`python -m artgate_gen.sd35_fetch --download` to make it."
+            )
+            raise NotCachedError(message)
         return Sd35Pipeline(
             binary=binary,
             model=model,
@@ -191,8 +222,8 @@ def build_argv(
         *("-p", full_prompt(prompt, target) + LORA_TAG, "-n", target.negative),
         *("--steps", str(STEPS), "--cfg-scale", str(GUIDANCE)),
         *("--sampling-method", SAMPLER, "-s", str(seed)),
+        *("--flash-attn", FLASH_ATTN),
         *("-W", str(width), "-H", str(height), "-o", str(out)),
-        *(("--offload-to-cpu",) if OFFLOAD else ()),
     ]
 
 

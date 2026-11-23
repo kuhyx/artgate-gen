@@ -25,8 +25,9 @@ Rendering runs in `sd-cli` from [stable-diffusion.cpp](https://github.com/leejet
 (MIT) on its Vulkan backend. There is no torch and no CUDA wheel anywhere in
 the dependency tree. The experimental `--backend sd35` (SD3.5-Large) renders
 through the same binary; its gated weights download only through
-`python -m artgate_gen.sd35_fetch --download`, and until then that backend
-exits naming the missing files.
+`python -m artgate_gen.sd35_fetch --download`, which also writes q8_0 copies
+of the model and T5 (14 GB, about 20 s) to `~/.cache/artgate-gen/sd35`. Until
+then that backend exits naming the missing files.
 `./run.sh --setup-only` installs `sd-cli` from the AUR
 (`stable-diffusion.cpp-vulkan-bin`); elsewhere, install stable-diffusion.cpp
 with Vulkan and put `sd-cli` on `PATH`, or point `ARTGATE_SD_CLI` at it.
