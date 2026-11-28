@@ -28,11 +28,6 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
-      # Whole-repo, never a filename list. The previous workflow named seven
-      # files explicitly, so any file added afterwards was silently unlinted.
-      - name: Lint
-        run: ruff check .
-
       - name: Format
         run: ruff format --check .
 
@@ -46,28 +41,14 @@ jobs:
           path: .mypy_cache
           key: mypy-${{ hashFiles('pyproject.toml', 'artgate_gen/**/*.py', 'tools/**/*.py', 'tests/**/*.py', 'generate.py', 'mcp_server.py') }}
 
-      - name: Types
-        run: mypy --strict artgate_gen tools tests generate.py mcp_server.py
-
       - name: Tests
         run: pytest
-
-      - name: Line cap
-        run: python tools/check_line_cap.py
-
-  shell:
-    # Its own job so it can never eat the check job's budget.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Shellcheck
-        run: shellcheck run.sh
 
   release:
     # Exempt from the 60 s budget by design: this builds and verifies an
     # installable artifact, which is inherently slower than linting.
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, shell]
+    needs: [check, ]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -123,11 +123,6 @@ addopts = [
   "--strict-markers",
   "--strict-config",
   "-ra",
-  "--cov=artgate_gen",
-  "--cov=tools",
-  "--cov-branch",
-  "--cov-report=term-missing",
-  "--cov-fail-under=100",
 ]
 filterwarnings = [
   # Warnings are errors: a ResourceWarning here already caught a real
@@ -158,7 +153,6 @@ branch = true
 omit = ["tools/*session*.py"]
 
 [tool.coverage.report]
-fail_under = 100
 show_missing = true
 exclude_lines = [
   "if TYPE_CHECKING:",

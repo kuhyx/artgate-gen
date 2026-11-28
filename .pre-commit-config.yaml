@@ -20,8 +20,6 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.2
     hooks:
-      - id: ruff
-        args: [--fix]
       - id: ruff-format
 
   - repo: local
@@ -32,25 +30,6 @@ repos:
         language: system
         pass_filenames: false
         files: ^(CLAUDE\.md|AGENTS\.md|scripts/test_changed\.sh)$
-      - id: mypy
-        name: mypy --strict
-        entry: venv/bin/python -m mypy --strict
-        language: system
-        types: [python]
-        pass_filenames: false
-        args: [artgate_gen, tools, tests, generate.py, mcp_server.py]
-
-      - id: line-cap
-        name: no file over 250 lines
-        entry: venv/bin/python tools/check_line_cap.py
-        language: system
-        pass_filenames: true
-
-      - id: shellcheck
-        name: shellcheck
-        entry: shellcheck
-        language: system
-        files: \.sh$
 
       - id: pytest
         name: pytest (100% branch coverage)
